@@ -1,0 +1,32 @@
+name: Deploy Kafka KRaft to OCP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'manifests/kraft-controller.yaml'
+      - 'manifests/kafka.yaml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, ocp]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $RUNNER_TEMP/kubeconfig
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Apply KRaftController
+        run: oc apply -f manifests/kraft-controller.yaml
+
+      - name: Apply Kafka
+        run: oc apply -f manifests/kafka.yaml
+
+      - name: Wait for rollout and verify
+        run: |
+          oc get kraftcontroller,kafka -n confluent
+          oc get pods -n confluent

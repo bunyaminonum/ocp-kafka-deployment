@@ -8,6 +8,11 @@ Bu kurulum önce bir **pratik/geliştirme ortamında** (OCI üzerinde CRC / Open
 ile simüle edilmiş tek node'lu OpenShift) yapılıp doğrulandı, gerçek/production bir OCP
 cluster'ına taşınmadan önce mantığın anlaşılması amaçlandı.
 
+> **Kurumsal/production ortamına geçerken:** Bu doküman playground'da (CRC) sıfırdan
+> yaptığımız her adımı (CRC kurulumu dahil) anlatır. Gerçek bir kurumsal OCP ortamında
+> hangi adımların atlanacağını, hangilerinin platform ekibiyle netleştirilmesi gerektiğini
+> ayrı ve sadeleştirilmiş bir doküman olan [`docs/kurumsal-playbook.md`](docs/kurumsal-playbook.md)'da bul.
+
 ## İçindekiler
 
 1. [Mimari özeti](#mimari-özeti)
@@ -17,10 +22,11 @@ cluster'ına taşınmadan önce mantığın anlaşılması amaçlandı.
 5. [OpenShift SCC kararı](#openshift-scc-kararı)
 6. [Kafka KRaft cluster'ının kurulumu](#kafka-kraft-clusterının-kurulumu)
 7. [Doğrulama](#doğrulama)
-8. [Karşılaşılan sorunlar ve çözümleri](#karşılaşılan-sorunlar-ve-çözümleri)
-9. [Şu anki durumun sınırlamaları](#şu-anki-durumun-sınırlamaları)
-10. [Production'a geçiş için yapılacaklar](#productiona-geçiş-için-yapılacaklar)
-11. [Kaynaklar](#kaynaklar)
+8. [GitHub Actions ile otomatik deployment](#github-actions-ile-otomatik-deployment)
+9. [Karşılaşılan sorunlar ve çözümleri](#karşılaşılan-sorunlar-ve-çözümleri)
+10. [Şu anki durumun sınırlamaları](#şu-anki-durumun-sınırlamaları)
+11. [Production'a geçiş için yapılacaklar](#productiona-geçiş-için-yapılacaklar)
+12. [Kaynaklar](#kaynaklar)
 
 ---
 
@@ -179,6 +185,258 @@ oc exec -n confluent kafka-0 -- kafka-topics --bootstrap-server kafka:9071 \
 Bu ortamda test edildi: 3 partition/RF3 topic başarıyla oluşturuldu, tüm partition'lar
 tam ISR'de (under-replicated partition yok), leader'lar 3 broker'a dengeli dağıldı.
 
+Ayrıca deploy sonrası loglarda görülen geçici `Node X disconnected` mesajları normaldir —
+KRaft quorum node'ları ilk bağlantı kurulurken kısa süreli bağlan/kopar döngüsü yaşayabilir.
+Kritik olan, bu mesajlardan sonra loglarda hata/restart olmadan sağlıklı periyodik
+aktivitenin (`Log roller completed` gibi) kesintisiz devam etmesidir.
+
+## GitHub Actions ile otomatik deployment
+
+Manifestleri elle `oc apply` etmek yerine, `main` branch'e push edildiğinde (veya elle
+tetiklendiğinde) `manifests/kraft-controller.yaml` ve `manifests/kafka.yaml`'ı otomatik
+uygulayan bir GitHub Actions pipeline'ı kuruldu.
+
+### 8.1 Üç ayrı kimlik doğrulama mekanizması — karıştırılmamalı
+
+Bu bölümde birbirinden tamamen bağımsız üç credential/mekanizma var:
+
+1. **SSH key**: Bu makineden (insan olarak) `git push` yapabilmek için — GitHub Actions'ın
+   kendisiyle hiç ilgisi yok.
+2. **Runner registration token**: Bu makineyi GitHub Actions self-hosted runner olarak
+   kaydetmek için — GitHub'ın verdiği, kısa ömürlü (~1 saat), tek seferlik bir token.
+3. **ServiceAccount token**: Pipeline'ın (runner üzerinde çalışan job'ın) OCP cluster'ına
+   login olması için — cluster tarafında ürettiğimiz, uzun ömürlü (1 yıl) bir token.
+
+### 8.2 Git repo ve SSH erişimi
+
+```bash
+git config --global user.name "<isim>"
+git config --global user.email "<email>"
+ssh-keygen -t ed25519 -C "<makine-etiketi>" -f ~/.ssh/id_ed25519 -N ""
+cat ~/.ssh/id_ed25519.pub   # bu çıktıyı GitHub'a eklenecek
+```
+
+Public key, repo'nun **Settings → Deploy keys → Add deploy key** (Write access işaretli)
+kısmına eklendi — hesabın genelindeki bir "Personal SSH key" yerine bilerek **Deploy Key**
+seçildi, çünkü bu makine sadece bu tek repo için kullanılıyor; Deploy Key'in erişimi de
+sadece o repo ile sınırlı (hesabın diğer repolarına erişemez).
+
+```bash
+ssh -T git@github.com   # "Hi <kullanıcı>/<repo>! You've successfully authenticated" beklenir
+git clone git@github.com:<kullanıcı>/<repo>.git
+```
+
+### 8.3 Self-hosted runner kurulumu
+
+**Neden self-hosted (GitHub-hosted değil)?** GitHub'ın kendi barındırdığı runner'lar
+internet üzerinden, GitHub'ın bulut sunucularında çalışır. Kurumsal bir OCP cluster'ı
+neredeyse kesin şekilde özel bir ağda/internete kapalı olacağından, GitHub-hosted bir
+runner cluster'ın API'sine hiç ulaşamaz. Bunun için runner'ı, cluster'a ağ erişimi olan
+bir makineye (burada bu OCI makinesi, kurumsal ortamda ilgili ağdaki bir makine) kaydetmek
+gerekiyor.
+
+**Güvenlik notu:** Self-hosted runner'lar **public repo'larda** risklidir — herkes bir
+Pull Request açıp o PR'ın CI adımlarında runner'da (yani bu makinede) kod çalıştırabilir.
+Repo'nun **private** olduğundan emin olunmalı.
+
+Runner sürümü ve indirme linki GitHub'ın resmi releases API'sinden alındı (tahmini/statik
+bir versiyon numarası kullanılmadı):
+```bash
+curl -s https://api.github.com/repos/actions/runner/releases/latest \
+  | grep -E '"tag_name"|browser_download_url.*linux-x64.*tar.gz'
+```
+Bu ortamda çözülen versiyon: **v2.335.1**.
+
+```bash
+mkdir -p ~/actions-runner && cd ~/actions-runner
+curl -o actions-runner-linux-x64-2.335.1.tar.gz -L \
+  https://github.com/actions/runner/releases/download/v2.335.1/actions-runner-linux-x64-2.335.1.tar.gz
+tar xzf ./actions-runner-linux-x64-2.335.1.tar.gz
+
+# Token: repo → Settings → Actions → Runners → New self-hosted runner sayfasından alınır
+# (~1 saat geçerli, tek seferlik, statik olarak burada tutulmaz)
+./config.sh --url https://github.com/<kullanıcı>/<repo> --token <TOKEN> \
+  --unattended --name oci-ocp-runner --labels self-hosted,ocp --work _work
+
+# Terminal kapansa bile ayakta kalsın diye systemd servisi olarak kur
+sudo ./svc.sh install
+sudo ./svc.sh start
+sudo ./svc.sh status
+```
+
+`--labels self-hosted,ocp`: workflow YAML'ında `runs-on: [self-hosted, ocp]` ile bu etiketle
+eşleştirilecek — birden fazla self-hosted runner olsaydı, işleri doğru makineye yönlendirmek
+için etiketleme önemli olurdu.
+
+### 8.4 Pipeline için kısıtlı yetkili kimlik (ServiceAccount + RBAC)
+
+Pipeline'ın `kubeadmin` (tam yetkili) yerine, sadece `confluent` namespace'inde
+Kafka/KRaftController yönetebilen, **least privilege** (en az yetki) bir kimliği olmalı —
+credential sızarsa/yanlış çalışırsa bile hasar `confluent` namespace'iyle sınırlı kalsın diye.
+
+Manifest: [`manifests/rbac-github-actions.yaml`](manifests/rbac-github-actions.yaml)
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: github-actions-deployer
+  namespace: confluent
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: github-actions-deployer
+  namespace: confluent
+rules:
+  - apiGroups: ["platform.confluent.io"]
+    resources: ["kafkas", "kraftcontrollers"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log", "events", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: github-actions-deployer
+  namespace: confluent
+subjects:
+  - kind: ServiceAccount
+    name: github-actions-deployer
+    namespace: confluent
+roleRef:
+  kind: Role
+  name: github-actions-deployer
+  apiGroup: rbac.authorization.k8s.io
+```
+
+**Neden `Role` (`ClusterRole` değil):** İzni bilerek sadece `confluent` namespace'iyle
+sınırlandırıyoruz. `kafkas`/`kraftcontrollers` üzerinde tam CRUD var (pipeline'ın asıl işi),
+`pods`/`events`/`statefulsets` üzerinde sadece okuma var (deploy sonrası doğrulama için —
+pod silme/oluşturma yetkisi CFK operatörünün işi, pipeline'ın değil).
+
+```bash
+oc apply -f manifests/rbac-github-actions.yaml
+oc get sa,role,rolebinding -n confluent | grep github-actions
+```
+
+### 8.5 Token, kubeconfig ve GitHub Secret
+
+```bash
+TOKEN=$(oc create token github-actions-deployer -n confluent --duration=8760h)
+API_SERVER=$(oc whoami --show-server)
+
+oc config set-cluster ci-cluster --server="$API_SERVER" --insecure-skip-tls-verify=true --kubeconfig=./ci-kubeconfig
+oc config set-credentials github-actions-deployer --token="$TOKEN" --kubeconfig=./ci-kubeconfig
+oc config set-context github-actions-deployer --cluster=ci-cluster --user=github-actions-deployer --namespace=confluent --kubeconfig=./ci-kubeconfig
+oc config use-context github-actions-deployer --kubeconfig=./ci-kubeconfig
+
+oc get kafka --kubeconfig=./ci-kubeconfig   # authentication + authorization + namespace testini tek seferde doğrular
+```
+
+- `oc create token ... --duration=8760h`: Modern Kubernetes'te (1.24+) ServiceAccount'lara
+  artık otomatik/kalıcı token verilmiyor; `TokenRequest API` ile talep üzerine süreli token
+  üretiliyor (`--duration` cluster'ın izin verdiği maksimumu aşarsa otomatik kısaltılır).
+- Ayrı bir `./ci-kubeconfig` dosyası: kişisel `~/.kube/config`'e (kubeadmin yetkisi içerir)
+  hiç dokunulmadı — pipeline'a ait kısıtlı kimlik fiziksel olarak izole bir dosyada.
+- `--insecure-skip-tls-verify=true`: CRC kendi kendine imzalı sertifika kullandığı için
+  bilerek eklendi. **Production'da kullanılmamalı**, yerine gerçek CA sertifikası
+  (`certificate-authority-data`) eklenmeli.
+
+Bu dosya asla git'e girmemeli (canlı bir token içeriyor):
+```bash
+echo "ci-kubeconfig" >> .gitignore
+git add .gitignore && git commit -m "Add .gitignore for local CI kubeconfig" && git push
+```
+
+Dosya, GitHub'ın şifreli Secret deposuna tek bir base64 metni olarak eklendi:
+```bash
+base64 -w0 ci-kubeconfig
+```
+Repo → **Settings → Secrets and variables → Actions → New repository secret** →
+Name: `KUBECONFIG_B64`, Value: yukarıdaki base64 çıktısı.
+
+### 8.6 Workflow YAML
+
+Dosya: [`.github/workflows/deploy-kafka.yaml`](.github/workflows/deploy-kafka.yaml)
+
+```yaml
+name: Deploy Kafka KRaft to OCP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'manifests/kraft-controller.yaml'
+      - 'manifests/kafka.yaml'
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, ocp]
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup kubeconfig
+        run: |
+          echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $RUNNER_TEMP/kubeconfig
+          echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
+      - name: Apply KRaftController
+        run: oc apply -f manifests/kraft-controller.yaml
+
+      - name: Apply Kafka
+        run: oc apply -f manifests/kafka.yaml
+
+      - name: Wait for rollout and verify
+        run: |
+          oc get kraftcontroller,kafka -n confluent
+          oc get pods -n confluent
+```
+
+- `on.push.branches/paths`: Sadece `main`'e, sadece bu iki manifest değiştiğinde tetiklenir
+  (README değişikliği gereksiz yere Kafka'ya dokunmasın diye).
+- `workflow_dispatch: {}`: GitHub arayüzünden elle "Run workflow" ile de tetiklenebilir.
+- `runs-on: [self-hosted, ocp]`: Runner'ı kaydederken verdiğimiz etiketle eşleşir.
+- `Setup kubeconfig` adımı: Secret'ı çözüp `$RUNNER_TEMP`'e (runner'ın kendi geçici
+  klasörü, iş bitince otomatik temizlenir) yazar, `GITHUB_ENV`'e yazarak sonraki tüm
+  adımlara `KUBECONFIG` ortam değişkenini miras bırakır.
+
+### 8.7 Pipeline doğrulama testleri
+
+**Test 1 — mekanik doğrulama (no-op apply):** Manifestlerde değişiklik yokken pipeline
+elle tetiklendi. Runner journal log'u:
+```
+Running job: deploy
+Job deploy completed with result: Succeeded
+```
+Bu, authentication (token geçerli), authorization (RBAC `Forbidden` vermedi) ve runner'ın
+job alabildiğini kanıtladı — ama Kafka zaten var olduğu için `apply` bir şey değiştirmedi
+(Kubernetes apply idempotent'tir).
+
+**Test 2 — sıfırdan deployment (gerçek test):** Cluster'daki Kafka/KRaftController elle
+tamamen silindi:
+```bash
+oc delete -f manifests/kafka.yaml
+oc delete -f manifests/kraft-controller.yaml
+oc get kafka,kraftcontroller,pods,pvc -n confluent   # hepsi boş/yok olduğu doğrulandı
+```
+Ardından pipeline `workflow_dispatch` ile tekrar tetiklendi. Sonuç:
+- Runner log'u: ikinci bir `Running job: deploy` → `Job deploy completed with result: Succeeded`.
+- `oc get pvc -n confluent`: **tamamen yeni PVC UID'leri** (öncekilerden farklı) — gerçekten
+  sıfırdan provision edildiğinin kanıtı, eski hiçbir kaynak yeniden kullanılmadı.
+- Tüm pod'lar ~2-3 dakika içinde `Running`, `0` restart ile ayağa kalktı.
+- Doğrulama için tekrar gerçek bir topic testi yapıldı (`pipeline-sifirdan-test`, 3 partition/RF3)
+  — tüm partition'lar tam ISR'de, leader'lar dengeli dağılmış.
+
+Bu iki test birlikte, pipeline'ın hem "değişiklik yoksa dokunma" hem "sıfırdan tam bir
+cluster'ı ayağa kaldırabilme" senaryolarını uçtan uca kanıtladı.
+
 ## Karşılaşılan sorunlar ve çözümleri
 
 Bunlar gerçek karşılaşılan hatalar — production ortamında da aynılarıyla karşılaşılabilir:
@@ -218,6 +476,8 @@ Bunlar bilerek atlanan/basitleştirilen noktalar — production öncesi tamamlan
 - ❌ Network Policy tanımlanmadı.
 - ❌ Backup/disaster recovery stratejisi yok.
 - ⚠️ Default SCC kullanıldı (Custom SCC değil) — daha sıkı izolasyon isteniyorsa gözden geçirilmeli.
+- ⚠️ GitHub Secret'ta ham kubeconfig (base64) saklandı — kurumun bir secret manager standardı varsa ona taşınmalı.
+- ⚠️ Self-hosted runner tek bir makinede (bu OCI VM'i), tek bir proje için kuruldu — kurumsal ortamda muhtemelen paylaşımlı bir runner havuzu vardır, tekrar kurmadan önce platform ekibine danış.
 
 ## Production'a geçiş için yapılacaklar
 
@@ -227,7 +487,12 @@ Bunlar bilerek atlanan/basitleştirilen noktalar — production öncesi tamamlan
 4. Confluent Control Center veya Prometheus/JMX exporter ile monitoring ekle.
 5. `PodDisruptionBudget` (CFK otomatik oluşturuyor, doğrula), `NetworkPolicy`, resource quota gözden geçir.
 6. Custom SCC'ye geçmeyi değerlendir (daha sıkı UID/GID kontrolü).
-7. GitHub Actions pipeline'ına secret/credential yönetimini (kubeconfig, pull secret) güvenli şekilde entegre et (bkz. sıradaki bölüm).
+7. GitHub Actions secret yönetimini gözden geçir — burada ham kubeconfig'i tek bir GitHub
+   Secret olarak sakladık; kurumun bir secret manager standardı (Vault, OIDC federasyonu vb.)
+   varsa ona taşınmalı. Ayrıca `KUBECONFIG_B64` içindeki token'ın (1 yıl geçerli) rotasyon
+   stratejisi belirlenmeli.
+8. Kurumsal ortama geçiş için [`docs/kurumsal-playbook.md`](docs/kurumsal-playbook.md)'daki
+   netleştirme sorularını platform/DevOps ekibiyle konuş.
 
 ## Kaynaklar
 

@@ -27,11 +27,12 @@ which folder is the real one.
 10. [Step 5 — Kafka + KRaftController CRs](#step-5--kafka--kraftcontroller-crs)
 11. [Step 6 — Verification](#step-6--verification)
 12. [Step 7 — Automation](#step-7--automation)
-13. [Quick troubleshooting](#quick-troubleshooting)
-14. [Repo file map](#repo-file-map)
-15. [Scope: what's genuinely tested vs. config-only](#scope-whats-genuinely-tested-vs-config-only)
-16. [What's left for real production](#whats-left-for-real-production)
-17. [Resources](#resources)
+13. [Observability (Prometheus + Grafana)](#observability-prometheus--grafana)
+14. [Quick troubleshooting](#quick-troubleshooting)
+15. [Repo file map](#repo-file-map)
+16. [Scope: what's genuinely tested vs. config-only](#scope-whats-genuinely-tested-vs-config-only)
+17. [What's left for real production](#whats-left-for-real-production)
+18. [Resources](#resources)
 
 ---
 
@@ -570,6 +571,20 @@ OpenShift console; ArgoCD's `admin` password is in the `openshift-gitops-cluster
 
 ---
 
+## Observability (Prometheus + Grafana)
+
+CFK's built-in JMX Prometheus exporter (port 7778 on every Kafka/KRaftController pod, disabled
+by default since CFK 3.2.1) is enabled, scraped by a trimmed Prometheus install, and
+visualized in Grafana with Confluent's official dashboards. Fully built and proven — real
+scrape targets, real non-zero metric values, real dashboards imported via the Grafana API.
+
+Full step-by-step (secrets, CR changes, Prometheus/Grafana Helm installs with the exact SCC
+and resource-constraint fixes this practice environment needed, dashboard import, remote
+access) is in [`observability/README.md`](observability/README.md) — kept separate from this
+file since it's an optional add-on layer, not part of the core Kafka deployment.
+
+---
+
 ## Quick troubleshooting
 
 | Symptom | Cause / fix |
@@ -604,9 +619,17 @@ manifests/
     ├── gitops-operator.yaml       # Red Hat OpenShift GitOps operator (OLM)
     ├── gitops-rbac.yaml            # ArgoCD's permissions in $NS (applied manually)
     └── gitops-application.yaml     # ArgoCD Application (watches only 03-kafka/)
+observability/
+├── README.md                     # Prometheus + Grafana, full step-by-step (optional add-on)
+├── prometheus-values.yaml         # Helm values (SCC + resource fixes explained)
+├── grafana-values.yaml            # Helm values (SCC + resource fixes explained)
+├── grafana-route.yaml             # OpenShift Route (the chart creates none)
+└── setup-grafana-dashboards.sh    # datasource + dashboard import via Grafana's HTTP API
 scripts/
 ├── create-sasl-secrets.sh        # Step 4 — imperative, never commits passwords
-└── verify-deployment.sh          # Step 6 — TLS+SASL smoke test
+├── verify-deployment.sh          # Step 6 — TLS+SASL smoke test
+├── grant-topic-acl.sh             # ACL grants (see Step 5 - Authorization)
+└── create-jmx-secrets.sh          # observability/ Step 1 — imperative, never commits passwords
 .github/workflows/deploy-kafka.yaml  # Option A workflow (triggers on manifests/03-kafka/**)
 ```
 
@@ -628,6 +651,7 @@ production capacity." Drawn honestly:
 | ACL authorization (`type: simple`) | ✅ Real, proven with both a granted (allowed) and an ungranted (denied) principal/topic/operation combination |
 | GitHub Actions (push) | ✅ Real, proven with a no-op run and a full delete+redeploy-from-scratch run |
 | ArgoCD GitOps (pull) | ✅ Real, proven with a live git-to-cluster sync test |
+| Observability (JMX metrics -> Prometheus -> Grafana) | ✅ Real — 6/6 scrape targets `up`, non-zero metric values confirmed, official dashboards imported. Trimmed to one component each (no HA, no alerting, no persistence) purely for this node's CPU budget |
 | Resource requests/limits | ✅ Real, but sized for this small practice environment, not real production load |
 | Pod anti-affinity | ⚠️ Config is correct but `preferred` (soft) — `required` would strand pods with nowhere to schedule on one node. The same YAML enforces hard isolation automatically on a real multi-node cluster |
 | Rack/multi-AZ awareness | ❌ Can't be tested on a single node, not included here |

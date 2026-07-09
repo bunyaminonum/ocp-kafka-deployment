@@ -1,0 +1,52 @@
+# Helm values for prometheus-community/prometheus, trimmed for this practice cluster.
+# Install: helm upgrade --install prometheus prometheus-community/prometheus -n confluent -f observability/prometheus-values.yaml
+#
+# Only the 'server' component is deployed — alertmanager/kube-state-metrics/node-exporter/
+# pushgateway are disabled outright. Not a security decision, purely a resource one: this
+# single-node practice node was already at ~98% allocated CPU before adding anything here
+# (see README - Scope). A real production monitoring stack would run the full set.
+alertmanager:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+prometheus-pushgateway:
+  enabled: false
+
+server:
+  # No PVC — metrics are lost if the pod restarts. Acceptable for a practice/demo dashboard,
+  # NOT acceptable in production (see observability/README.md - production differences).
+  persistentVolume:
+    enabled: false
+
+  # Sized to fit the ~89m of free CPU this node had at the time — not a real sizing
+  # recommendation, just what fit. A production Prometheus needs far more (retention,
+  # cardinality, query load).
+  resources:
+    requests:
+      cpu: 30m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+  # The chart's default runs as a fixed UID (65534, 'nobody') which OpenShift's SCCs reject
+  # outright (same class of problem as Kafka's own UID 1001 - see README, Step 1). Nulling
+  # every subfield lets OpenShift assign its own allowed arbitrary UID/GID instead.
+  # IMPORTANT: setting the whole securityContext to `{}` does NOT work - Helm --set/-f merge
+  # into the chart's own values.yaml defaults rather than replacing the map, so the chart's
+  # runAsUser: 65534 etc. survive underneath an empty override. Each subfield must be nulled
+  # individually to actually clear it. Confirmed by testing (the pod stayed Forbidden with
+  # `securityContext: {}` alone, and only cleared once nulled key by key).
+  securityContext:
+    runAsUser: null
+    runAsGroup: null
+    runAsNonRoot: null
+    fsGroup: null
+
+  # No scrape config needed here: CFK auto-annotates every Kafka/KRaftController pod with
+  # prometheus.io/scrape=true and prometheus.io/port=7778 once spec.metrics.jmx is enabled,
+  # and this chart's default server config already has a scrape job that watches for exactly
+  # those annotations (job=kubernetes-pods). Confirmed via /api/v1/targets - all 6 pods
+  # (3 Kafka + 3 KRaftController) were auto-discovered with zero extra config.

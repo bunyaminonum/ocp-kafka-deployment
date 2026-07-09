@@ -1,0 +1,44 @@
+# Helm values for grafana/grafana, trimmed for this practice cluster.
+# Install: helm upgrade --install grafana grafana/grafana -n confluent -f observability/grafana-values.yaml
+
+# No PVC — dashboards/datasources configured through the UI/API are lost on pod restart.
+# Acceptable for a practice/demo instance; production should persist this (or provision
+# datasources/dashboards declaratively instead of relying on runtime state at all).
+persistence:
+  enabled: false
+
+# The default chart runs an init container (plain busybox, as root) that chowns the data
+# directory before the main container starts. Since we're letting OpenShift assign its own
+# arbitrary UID below (rather than forcing UID 472 like the chart wants), this root init
+# container would ALSO get rejected by the SCC - a second Forbidden error on top of the
+# first. Disabling it avoids that; Grafana's own image handles arbitrary UIDs fine without
+# it once the fixed UID is removed.
+initChownData:
+  enabled: false
+
+# Not used here - dashboards/datasources were loaded once via the Grafana HTTP API instead
+# (see grafana-route.yaml + README). Disabled explicitly so a future values change doesn't
+# silently enable a ConfigMap-watching sidecar we don't need.
+sidecar:
+  dashboards:
+    enabled: false
+  datasources:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 30m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Same class of problem as Prometheus's server.securityContext (see prometheus-values.yaml)
+# - the chart's default fixed UID/GID (472) is rejected by OpenShift's SCCs. Each subfield
+# must be nulled individually; setting the whole map to `{}` is a no-op against the chart's
+# own defaults (Helm merges, doesn't replace).
+securityContext:
+  runAsUser: null
+  runAsGroup: null
+  runAsNonRoot: null
+  fsGroup: null

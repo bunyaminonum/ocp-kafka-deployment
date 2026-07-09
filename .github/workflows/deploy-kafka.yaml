@@ -4,8 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'manifests/kraft-controller.yaml'
-      - 'manifests/kafka.yaml'
+      - 'manifests/03-kafka/**'
   workflow_dispatch: {}
 
 jobs:
@@ -20,11 +19,8 @@ jobs:
           echo "${{ secrets.KUBECONFIG_B64 }}" | base64 -d > $RUNNER_TEMP/kubeconfig
           echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
-      - name: Apply KRaftController
-        run: oc apply -f manifests/kraft-controller.yaml
-
-      - name: Apply Kafka
-        run: oc apply -f manifests/kafka.yaml
+      - name: Apply Kafka application layer
+        run: oc apply -f manifests/03-kafka/
 
       - name: Wait for rollout and verify
         run: |

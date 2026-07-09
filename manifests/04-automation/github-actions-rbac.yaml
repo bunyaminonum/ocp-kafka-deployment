@@ -1,3 +1,7 @@
+# Least-privilege identity for the GitHub Actions self-hosted runner (push-based automation,
+# see README - Automation option A). Same least-privilege pattern as gitops-rbac.yaml (used
+# for ArgoCD) — same idea, just a different identity. Scoped ONLY to kafkas/kraftcontrollers
+# in the confluent namespace; read-only on pods/statefulsets for the workflow's verify step.
 apiVersion: v1
 kind: ServiceAccount
 metadata:

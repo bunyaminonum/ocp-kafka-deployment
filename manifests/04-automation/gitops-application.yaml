@@ -1,7 +1,7 @@
-# ArgoCD Application — watches ONLY the Kafka manifest folder (prod-deployment/kafka).
-# Namespace/SCC/cert-manager/operator (the bootstrap layer) are DELIBERATELY out of scope:
-# those are installed once, manually / by the platform team, and aren't touched on every
-# Kafka change.
+# ArgoCD Application — watches ONLY the Kafka manifest folder (manifests/03-kafka).
+# Namespace/SCC/cert-manager/operator (the bootstrap layer: manifests/01-*, 02-*, 04-*) are
+# DELIBERATELY out of scope: those are installed once, manually / by the platform team, and
+# aren't touched on every Kafka change.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -12,7 +12,7 @@ spec:
   source:
     repoURL: git@github.com:bunyaminonum/ocp-kafka-deployment.git
     targetRevision: main
-    path: prod-deployment/kafka
+    path: manifests/03-kafka
   destination:
     server: https://kubernetes.default.svc
     namespace: confluent

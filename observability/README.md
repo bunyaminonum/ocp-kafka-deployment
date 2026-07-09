@@ -150,6 +150,7 @@ but a plain Helm chart like this one does not.
 | `0/1 nodes are available: Insufficient cpu` | Node was already near 100% CPU-requested; lower `resources.requests.cpu` on the component (30m was enough here — check free headroom with `oc describe node \| grep -A6 "Allocated resources"` first) |
 | Browser `ERR_CONNECTION_REFUSED` on `<svc>.<ns>.svc.cluster.local` | That's an in-cluster-only DNS name, not a route. Create an actual `Route` and use its `apps-crc.testing` hostname instead |
 | `curl: command not found` inside a Kafka/KRaftController pod | `cp-server` is a minimal image (same reason `tar` is also missing — see main README). Use `oc port-forward` and run `curl` from the host instead of inside the pod |
+| Dashboards import fine but every panel shows **No data** | Two label mismatches, both confirmed against the live Prometheus API: (1) the published dashboards filter on `kubernetes_namespace`, but current prometheus-community chart relabeling produces `namespace` (`/api/v1/label/kubernetes_namespace/values` returned empty, `namespace` was populated); (2) their `component_name` template variable reads `kube_pod_labels` from kube-state-metrics — disabled here for CPU budget — so the variable resolved empty and every panel filtered on `app=~""`. `setup-grafana-dashboards.sh` now patches both before importing; the same panel queries returned real data (e.g. PartitionCount 433) once the labels matched |
 
 ## In enterprise production
 

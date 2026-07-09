@@ -3,6 +3,14 @@
 # (confluent-platform.json, confluent-operator.json from confluentinc/confluent-kubernetes-
 # examples). Idempotent - safe to re-run (datasource POST will fail harmlessly if it already
 # exists; dashboard import uses overwrite: true).
+#
+# The dashboards are patched before import — as published they show "No data" everywhere on
+# this stack, for two confirmed reasons (see observability/README.md - Troubleshooting):
+#   1. Their queries filter on the `kubernetes_namespace` label, but current
+#      prometheus-community chart relabeling produces `namespace`.
+#   2. Their `component_name` template variable reads `kube_pod_labels`, a kube-state-metrics
+#      metric — and kube-state-metrics is disabled here for CPU budget. Rewritten to read the
+#      `app` label from the Kafka metrics that already exist.
 set -euo pipefail
 
 NS="${1:-confluent}"
@@ -27,8 +35,15 @@ for dash in confluent-platform confluent-operator; do
     "https://raw.githubusercontent.com/confluentinc/confluent-kubernetes-examples/master/monitoring/grafana-dashboard/$dash.json"
   python3 -c "
 import json
-d = json.load(open('$TMP_DIR/$dash.json'))
+raw = open('$TMP_DIR/$dash.json').read()
+raw = raw.replace('kubernetes_namespace', 'namespace')
+d = json.loads(raw)
 d.pop('id', None)
+for v in d.get('templating', {}).get('list', []):
+    q = v.get('query')
+    if isinstance(q, dict) and 'kube_pod_labels' in str(q.get('query', '')):
+        q['query'] = 'label_values({confluent_platform=\"true\",platform_confluent_io_type=~\"\$controller_type\"}, app)'
+        v['definition'] = q['query']
 print(json.dumps({'dashboard': d, 'overwrite': True, 'inputs': [{'name':'DS_PROMETHEUS','type':'datasource','pluginId':'prometheus','value':'Prometheus'}]}))
 " > "$TMP_DIR/import-$dash.json"
   curl -s -u "admin:$GRAFANA_PASS" -X POST "http://localhost:$LOCAL_PORT/api/dashboards/db" \

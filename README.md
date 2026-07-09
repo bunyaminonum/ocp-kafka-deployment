@@ -489,6 +489,45 @@ the cluster side.
 > to lower ArgoCD's default component resource requests and disable `dex`/SSO
 > (`spec.sso: null`) — not needed on real production-sized nodes.
 
+### Reaching the web UIs remotely (practice environment only)
+
+> Specific to a practice environment where the cluster has no public ingress and only SSH is
+> reachable from outside (e.g. a CRC VM behind a cloud firewall). On a real OCP cluster the
+> console/ArgoCD routes are normally reachable directly — skip this.
+
+All of CRC's routes (`oc get routes -A`) sit behind the same router, on the same
+`127.0.0.1:443` inside the VM — an SSH local port-forward reaches all of them at once:
+
+```bash
+# on your local machine, as Administrator/root (binding port 443 requires it):
+ssh -i <private-key> -L 443:<any-apps-crc.testing-hostname>:443 <user>@<vm-public-ip>
+```
+
+Then, on your local machine, map every hostname you need to `127.0.0.1` (Windows:
+`C:\Windows\System32\drivers\etc\hosts`; Linux/Mac: `/etc/hosts`):
+
+```
+127.0.0.1  console-openshift-console.apps-crc.testing
+127.0.0.1  oauth-openshift.apps-crc.testing
+127.0.0.1  openshift-gitops-server-openshift-gitops.apps-crc.testing
+```
+
+Browse **without a port** (`https://console-openshift-console.apps-crc.testing/`, no `:8443`
+etc.). This matters: routes carry no port information, so the OpenShift console/OAuth login
+flow builds its internal redirect URLs assuming the standard port 443 — forwarding to a
+non-standard local port (e.g. `8443`) breaks the login redirect (it silently drops to `:80`,
+which isn't tunneled, and the login page fails with a connection-refused error). ArgoCD's own
+UI doesn't have this problem (no separate OAuth redirect), but using the standard port for
+everything avoids the inconsistency.
+
+Credentials: `kubeadmin` / <cluster-specific, get with `crc console --credentials`> for the
+OpenShift console; ArgoCD's `admin` password is in the `openshift-gitops-cluster` secret
+(`oc extract secret/openshift-gitops-cluster -n openshift-gitops --to=-`).
+
+> **In enterprise production:** don't do this — a real cluster's console/ArgoCD are reached
+> directly over the corporate network/VPN, never through an ad-hoc SSH tunnel from a
+> developer's laptop.
+
 ---
 
 ## Quick troubleshooting

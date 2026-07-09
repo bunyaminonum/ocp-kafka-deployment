@@ -1,0 +1,17 @@
+# Red Hat'in resmi "OpenShift GitOps" (ArgoCD) operatörü.
+# Sadece AllNamespaces install modu destekleniyor (cluster'dan doğrulandı) — bu yüzden
+# ayrı bir namespace/OperatorGroup AÇMIYORUZ, var olan 'openshift-operators' + onun
+# 'global-operators' OperatorGroup'unu kullanıyoruz. Kurulunca otomatik olarak
+# 'openshift-gitops' namespace'i ve hazır bir ArgoCD instance'ı oluşuyor.
+# Katalog/kanal/versiyon cluster'dan doğrulandı: redhat-operators, latest, v1.21.1
+apiVersion: operators.coreos.com/v1alpha1
+kind: Subscription
+metadata:
+  name: openshift-gitops-operator
+  namespace: openshift-operators
+spec:
+  channel: latest
+  name: openshift-gitops-operator
+  source: redhat-operators
+  sourceNamespace: openshift-marketplace
+  installPlanApproval: Automatic

@@ -1,0 +1,43 @@
+# Custom SCC for Confluent components on OpenShift.
+# Kaynak: https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/security/openshift-security/scc.yaml
+#
+# Playground'daki "podSecurity.enabled=false" (Default SCC) yaklaşımının YERİNE geçer.
+# Burada UID/GID aralığını AÇIKÇA sınırlandırıyoruz: CFK'nın istediği sabit UID 1001,
+# bu SCC'nin izin verdiği aralığın (1000-1005) içinde kalıyor — yani restricted-v2'yi
+# ezmeden, kurumun onayladığı dar bir aralıkta güvenle çalışıyoruz.
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: confluent-prod
+  annotations:
+    kubernetes.io/description: "Confluent Kafka (KRaft) prod bileşenleri için sınırlı UID/GID aralıklı SCC"
+priority: 10
+# UID: sadece 1000-1005 aralığına izin (CFK varsayılanı 1001 bu aralıkta)
+runAsUser:
+  type: MustRunAsRange
+  uidRangeMin: 1000
+  uidRangeMax: 1005
+# fsGroup: sadece 1001-1005
+fsGroup:
+  type: MustRunAs
+  ranges:
+    - min: 1001
+      max: 1005
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: RunAsAny
+requiredDropCapabilities:
+  - MKNOD
+# Sadece Kafka'nın ihtiyaç duyduğu volume tipleri (hostPath gibi tehlikeli olanlar YOK)
+volumes:
+  - configMap
+  - downwardAPI
+  - emptyDir
+  - persistentVolumeClaim
+  - projected
+  - secret
+# NOT: 'groups' veya 'users' bilerek burada tanımlanmadı — SCC'yi belirli
+# ServiceAccount'lara 'oc adm policy add-scc-to-user' ile açıkça bağlayacağız
+# (bkz. prod-deployment/README.md). Böylece bu SCC sadece Confluent SA'larına uygulanır,
+# cluster'daki herkese değil.

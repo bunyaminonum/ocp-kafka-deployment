@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kafka-prod
+  namespace: openshift-gitops
+spec:
+  project: default
+  source:
+    repoURL: git@github.com:bunyaminonum/ocp-kafka-deployment.git
+    targetRevision: main
+    path: prod-deployment/kafka
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: confluent-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -574,14 +574,19 @@ OpenShift console; ArgoCD's `admin` password is in the `openshift-gitops-cluster
 ## Observability (Prometheus + Grafana)
 
 CFK's built-in JMX Prometheus exporter (port 7778 on every Kafka/KRaftController pod, disabled
-by default since CFK 3.2.1) is enabled, scraped by a trimmed Prometheus install, and
-visualized in Grafana with Confluent's official dashboards. Fully built and proven — real
-scrape targets, real non-zero metric values, real dashboards imported via the Grafana API.
+by default since CFK 3.2.1) is enabled and scraped by a trimmed Prometheus install; **kminion**
+adds the one thing broker JMX can't — true consumer-group lag — connecting over TLS+SASL as a
+dedicated read-only principal. Everything is visualized in Grafana via a **hand-built,
+49-panel dashboard** (`namespace`/`topic`/`consumer-group` filters; consumer lag,
+per-topic/per-partition detail, replication, request latency, network, KRaft/Raft, JVM) plus
+Confluent's official dashboards. Fully built and proven — a deliberately-lagged demo group
+reported lag=40 identically in kminion, Prometheus, and `kafka-consumer-groups --describe`.
 
-Full step-by-step (secrets, CR changes, Prometheus/Grafana Helm installs with the exact SCC
-and resource-constraint fixes this practice environment needed, dashboard import, remote
-access) is in [`observability/README.md`](observability/README.md) — kept separate from this
-file since it's an optional add-on layer, not part of the core Kafka deployment.
+Full step-by-step (JMX/kminion secrets, CR changes, Prometheus/Grafana Helm installs with the
+exact SCC and resource-constraint fixes this practice environment needed, kminion's SASL user +
+read-only ACLs, dashboard import, remote access) is in
+[`observability/README.md`](observability/README.md) — kept separate from this file since it's
+an optional add-on layer, not part of the core Kafka deployment.
 
 ---
 
@@ -620,17 +625,19 @@ manifests/
     ├── gitops-rbac.yaml            # ArgoCD's permissions in $NS (applied manually)
     └── gitops-application.yaml     # ArgoCD Application (watches only 03-kafka/)
 observability/
-├── README.md                     # Prometheus + Grafana, full step-by-step (optional add-on)
+├── README.md                     # Prometheus + Grafana + kminion, full step-by-step (optional)
 ├── prometheus-values.yaml         # Helm values (SCC + resource fixes explained)
 ├── grafana-values.yaml            # Helm values (SCC + resource fixes explained)
 ├── grafana-route.yaml             # OpenShift Route (the chart creates none)
-├── kafka-kraft-dashboard.json     # this repo's own Grafana dashboard (5 rows, 32 panels)
-└── setup-grafana-dashboards.sh    # datasource + dashboard import via Grafana's HTTP API
+├── kafka-kraft-dashboard.json     # this repo's own Grafana dashboard (9 rows, 49 panels)
+├── setup-grafana-dashboards.sh    # datasource + dashboard import via Grafana's HTTP API
+└── kminion/kminion.yaml           # consumer-group-lag exporter (TLS+SASL)
 scripts/
 ├── create-sasl-secrets.sh        # Step 4 — imperative, never commits passwords
 ├── verify-deployment.sh          # Step 6 — TLS+SASL smoke test
 ├── grant-topic-acl.sh             # ACL grants (see Step 5 - Authorization)
-└── create-jmx-secrets.sh          # observability/ Step 1 — imperative, never commits passwords
+├── create-jmx-secrets.sh          # observability/ Step 1 — imperative, never commits passwords
+└── create-kminion-user-and-acls.sh # observability/ Step 5 — kminion SASL user + read-only ACLs
 .github/workflows/deploy-kafka.yaml  # Option A workflow (triggers on manifests/03-kafka/**)
 ```
 
@@ -652,7 +659,8 @@ production capacity." Drawn honestly:
 | ACL authorization (`type: simple`) | ✅ Real, proven with both a granted (allowed) and an ungranted (denied) principal/topic/operation combination |
 | GitHub Actions (push) | ✅ Real, proven with a no-op run and a full delete+redeploy-from-scratch run |
 | ArgoCD GitOps (pull) | ✅ Real, proven with a live git-to-cluster sync test |
-| Observability (JMX metrics -> Prometheus -> Grafana) | ✅ Real — 6/6 scrape targets `up`, non-zero metric values confirmed, official dashboards imported. Trimmed to one component each (no HA, no alerting, no persistence) purely for this node's CPU budget |
+| Observability (JMX -> Prometheus -> Grafana) | ✅ Real — 6/6 scrape targets `up`, a 49-panel hand-built dashboard with all 70 queries confirmed against live data. Trimmed to one component each (no HA/alerting/persistence) purely for this node's CPU budget |
+| Consumer-group lag (kminion) | ✅ Real — kminion connects over TLS+SASL as a dedicated read-only principal; a deliberately-lagged demo group reported lag=40 identically in kminion, Prometheus, and `kafka-consumer-groups --describe` |
 | Resource requests/limits | ✅ Real, but sized for this small practice environment, not real production load |
 | Pod anti-affinity | ⚠️ Config is correct but `preferred` (soft) — `required` would strand pods with nowhere to schedule on one node. The same YAML enforces hard isolation automatically on a real multi-node cluster |
 | Rack/multi-AZ awareness | ❌ Can't be tested on a single node, not included here |

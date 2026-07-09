@@ -1,23 +1,36 @@
-# Observability — JMX Metrics, Prometheus, Grafana
+# Observability — JMX Metrics, Prometheus, Grafana, Consumer-Group Lag
 
 Adds monitoring to the Kafka/KRaftController cluster from the main [README](../README.md):
-CFK's built-in JMX Prometheus exporter, scraped by Prometheus, visualized in Grafana with
-Confluent's official dashboards. Built and proven on the same practice environment (CRC on
-an OCI VM) as the rest of this repo — every command below actually ran, every number quoted
-is real.
+CFK's built-in JMX Prometheus exporter for broker/controller metrics, **kminion** for the one
+thing JMX can't give you (true consumer-group lag), scraped by Prometheus, visualized in
+Grafana with a comprehensive hand-built dashboard. Built and proven on the same practice
+environment (CRC on an OCI VM) as the rest of this repo — every command below actually ran,
+every number quoted is real.
 
-> **Practice-environment-specific:** the resource trims and manual Route (Step 4) below exist
-> because of this node's tight CPU budget and lack of pre-existing ingress. See
-> "In enterprise production" callouts throughout for what changes on a real cluster.
+> **Practice-environment-specific:** the resource trims and manual Route below exist because
+> of this node's tight CPU budget and lack of pre-existing ingress. See "In enterprise
+> production" callouts throughout for what changes on a real cluster.
 
 ## Architecture
 
 ```
 Kafka / KRaftController pods
-  └─ JVM in-process javaagent (jmx_prometheus_javaagent) on :7778
-       └─ scraped by Prometheus (auto-discovered via prometheus.io/scrape pod annotation)
-            └─ Grafana (Prometheus as datasource) ── Confluent's official dashboards
+  ├─ JVM in-process javaagent (jmx_prometheus_javaagent) on :7778   ── broker/controller metrics
+  │      (auto-discovered by Prometheus via prometheus.io/scrape annotation)
+  └─ kminion Deployment (:8080), connects over TLS+SASL as a read-only monitoring principal
+         └─ produces consumer-group lag (committed offset vs. log-end), per group/topic/partition
+                              │
+              both scraped by Prometheus
+                              │
+                           Grafana ── this repo's dashboard + Confluent's official ones
 ```
+
+**Why kminion at all?** Broker JMX exposes throughput, replication, request, and JVM metrics —
+but **not** true external consumer-group lag (a consumer's committed offset vs. the log-end
+offset). That's a well-known gap; the standard fixes are a dedicated exporter — **kminion**
+(used here), kafka-lag-exporter, or Burrow. Verified directly against this cluster: a search
+for lag metrics in the broker JMX output returned only *replica* (follower) lag, never
+consumer-group lag.
 
 Two separate JMX-related ports, easy to conflate:
 - **7203** — real JMX/RMI (`jconsole`, `jmxterm`, remote debugging). Requires the
@@ -106,7 +119,34 @@ issue as Prometheus, **plus** a root `busybox` init container the chart runs by 
 chown its data directory — disabled, since it would hit the exact same SCC wall and isn't
 needed once the fixed UID requirement is removed).
 
-## Step 5 — Datasource + dashboards
+## Step 5 — kminion (consumer-group lag exporter)
+
+Broker JMX doesn't expose consumer-group lag (see Architecture), so deploy kminion. It needs
+its own least-privilege SASL identity — reusing the app `client` principal would force us to
+grant that principal cluster-wide DESCRIBE, breaking the least-privilege ACL story from the
+main README. So a dedicated read-only `kminion` monitoring principal is created instead:
+
+```bash
+./scripts/create-kminion-user-and-acls.sh confluent   # adds SASL user + read-only ACLs + secret
+oc apply -f observability/kminion/kminion.yaml         # deploys kminion (TLS+SASL to kafka:9071)
+oc logs -n confluent -l app=kminion --tail=5           # expect "successfully connected to kafka cluster"
+```
+
+The script grants `User:kminion` exactly three read-only ACLs (cluster DESCRIBE, all-topics
+DESCRIBE+DescribeConfigs, all-groups DESCRIBE) — the minimum kminion needs to enumerate groups
+and their lag. **Verified live:** before the ACLs, kminion logged `TOPIC_AUTHORIZATION_FAILED`
+and produced no lag metrics; after, `kminion_kafka_consumer_group_topic_partition_lag` matched
+`kafka-consumer-groups --describe` exactly (a demo group deliberately left 40 messages behind
+showed lag=40 on the right partition, in both tools).
+
+kminion pods carry the same `prometheus.io/scrape` annotation, so Prometheus auto-discovers
+them — no scrape-config change. Its metrics use the `kminion_kafka_` prefix.
+
+> **In enterprise production:** the monitoring principal's credentials come from the org's
+> secret manager; kminion (or kafka-lag-exporter) is typically run once, centrally, for the
+> whole cluster rather than per-team.
+
+## Step 6 — Datasource + dashboards
 
 ```bash
 ./observability/setup-grafana-dashboards.sh confluent
@@ -116,21 +156,41 @@ Adds Prometheus as a datasource and imports **three** dashboards via the Grafana
 
 - [`kafka-kraft-dashboard.json`](kafka-kraft-dashboard.json) — **this repo's own dashboard**,
   the recommended one. Hand-built for exactly this stack from metric names verified against
-  the live Prometheus (no invented queries). Five rows: Cluster Health (stat panels — active
-  controllers, under-replicated partitions, online brokers, raft voters), Kafka Throughput
-  (bytes/messages per broker), Kafka Broker Internals (partition/leader balance, idle %,
-  request latency p99, request rate by type, queue depth), KRaft Controller / Raft Quorum
-  (which pod is leader, log-end offset vs high-watermark, epoch, commit latency, voters), and
-  JVM & System (heap, GC time, CPU). Every one of its 32 panel queries was confirmed to
-  return data through Grafana's own query API before committing.
+  the live Prometheus + kminion (no invented queries). **Nine rows, 49 panels**, with
+  `namespace` / `topic` (multi) / `consumer group` (multi) filter variables:
+  1. **Cluster Health** — stat panels: active controllers, online brokers, under-replicated,
+     offline replicas, at-min-ISR, raft voters, total consumer lag, cluster bytes-in.
+  2. **Consumer Group Lag (kminion)** — total lag by group, lag by group/topic, per-partition
+     lag table, active members per group (0 members + non-zero lag = a stuck consumer).
+  3. **Throughput** — bytes in/out & messages by topic, produce/fetch request rate, failed
+     produce/fetch, bytes rejected.
+  4. **Topic / Partition Detail** — log size by topic, per-partition log-end offset & segment
+     count, per-partition ISR count, under-replicated, and replica (follower) lag.
+  5. **Replication Health** — ISR shrink/expand & failed-ISR rate, partition/leader balance.
+  6. **Request Performance** — latency p99 by type, produce-latency breakdown (queue/local/
+     remote/response), handler & network idle %, request rate by type, queue sizes, purgatory.
+  7. **Network / Connections** — socket memory pool, expired/aged connections killed, per-broker
+     network throughput.
+  8. **KRaft Controller / Raft Quorum** — leader, log offsets, epoch, unclean elections, commit
+     latency, records rate, voters/observers.
+  9. **JVM & System** — heap, non-heap, GC time, CPU, threads (incl. deadlocked), file descriptors.
+
+  All 70 panel queries were confirmed to return real data against the live Prometheus before
+  committing.
 - Confluent's official
   [`confluent-platform.json`](https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/monitoring/grafana-dashboard/confluent-platform.json)
   and
   [`confluent-operator.json`](https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/monitoring/grafana-dashboard/confluent-operator.json)
   — imported as-is (patched on the fly, see below) for comparison.
 
-In Grafana the repo dashboard is titled **"Kafka (KRaft) — Cluster Overview"**; pick your
-namespace from the `namespace` dropdown at the top.
+In Grafana the repo dashboard is titled **"Kafka (KRaft) — Full Cluster & Consumer Lag"**;
+pick your namespace/topic/group from the dropdowns at the top.
+
+> **Note — Grafana has no persistence here** (`persistence.enabled: false`, for CPU/PVC
+> simplicity). If the Grafana pod is ever rescheduled (e.g. under node pressure), it comes
+> back empty — just re-run `setup-grafana-dashboards.sh` to restore the datasource and all
+> dashboards. Git is the source of truth, so nothing is lost. In production, enable a PVC or
+> provision dashboards declaratively.
 
 ## Accessing Grafana
 
@@ -165,7 +225,11 @@ but a plain Helm chart like this one does not.
 | `0/1 nodes are available: Insufficient cpu` | Node was already near 100% CPU-requested; lower `resources.requests.cpu` on the component (30m was enough here — check free headroom with `oc describe node \| grep -A6 "Allocated resources"` first) |
 | Browser `ERR_CONNECTION_REFUSED` on `<svc>.<ns>.svc.cluster.local` | That's an in-cluster-only DNS name, not a route. Create an actual `Route` and use its `apps-crc.testing` hostname instead |
 | `curl: command not found` inside a Kafka/KRaftController pod | `cp-server` is a minimal image (same reason `tar` is also missing — see main README). Use `oc port-forward` and run `curl` from the host instead of inside the pod |
-| Dashboards import fine but every panel shows **No data** | Three separate causes, all confirmed live: (1) the published dashboards filter on `kubernetes_namespace`, but current prometheus-community chart relabeling produces `namespace` (`/api/v1/label/kubernetes_namespace/values` returned empty, `namespace` was populated); (2) their `component_name` template variable reads `kube_pod_labels` from kube-state-metrics — disabled here for CPU budget — so the variable resolved empty and every panel filtered on `app=~""`; (3) importing via `POST /api/dashboards/db` silently ignores the `inputs` datasource mapping, leaving 14 unresolved `${DS_PROMETHEUS}` placeholders — the correct endpoint is `/api/dashboards/import`. `setup-grafana-dashboards.sh` handles all three; the same panel queries returned real data (e.g. PartitionCount 433) once fixed |
+| Dashboards import fine but every panel shows **No data** | Three separate causes, all confirmed live: (1) the published dashboards filter on `kubernetes_namespace`, but current prometheus-community chart relabeling produces `namespace` (`/api/v1/label/kubernetes_namespace/values` returned empty, `namespace` was populated); (2) their `component_name` template variable reads `kube_pod_labels` from kube-state-metrics — disabled here for CPU budget — so the variable resolved empty and every panel filtered on `app=~""`; (3) importing via `POST /api/dashboards/db` silently ignores the `inputs` datasource mapping, leaving unresolved `${DS_PROMETHEUS}` placeholders — the correct endpoint is `/api/dashboards/import`. `setup-grafana-dashboards.sh` handles all three; the same panel queries returned real data (e.g. PartitionCount 433) once fixed |
+| Panel crashes with `"value" not found in: fixed,shades,thresholds,palette-classic,...` | A stat panel's `fieldConfig.defaults.color.mode` was set to `"value"` — not a valid color mode. `"value"` belongs to the separate `options.colorMode` (value/background) toggle. Stat color must come from `thresholds`/`fixed`/`palette-classic` |
+| kminion logs `TOPIC_AUTHORIZATION_FAILED`, no lag metrics | Its SASL principal lacks the read-only monitoring ACLs. Run `scripts/create-kminion-user-and-acls.sh` (grants cluster/topic/group DESCRIBE to `User:kminion`) |
+| kminion `PLAIN user and pass must be non-empty` | The SASL password env var name is wrong. kminion maps env to the config path uppercased, dot→underscore, **no prefix**: `kafka.sasl.password` → `KAFKA_SASL_PASSWORD` |
+| Grafana test queries all fail / "Data source not found" | The datasource UID changed (Grafana lost state on a restart, or was re-created). Always look the UID up fresh (`/api/datasources/name/Prometheus`), never cache it. Re-running `setup-grafana-dashboards.sh` recreates datasource + dashboards |
 
 ## In enterprise production
 
@@ -192,8 +256,11 @@ observability/
 ├── prometheus-values.yaml          # Helm values for prometheus-community/prometheus
 ├── grafana-values.yaml             # Helm values for grafana/grafana
 ├── grafana-route.yaml              # OpenShift Route (the chart creates none)
-├── kafka-kraft-dashboard.json      # this repo's own dashboard (5 rows, 32 verified panels)
-└── setup-grafana-dashboards.sh     # datasource + dashboard import via Grafana's HTTP API
+├── kafka-kraft-dashboard.json      # this repo's own dashboard (9 rows, 49 verified panels)
+├── setup-grafana-dashboards.sh     # datasource + dashboard import via Grafana's HTTP API
+└── kminion/
+    └── kminion.yaml                # consumer-lag exporter (ConfigMap + Deployment + Service)
 scripts/
-└── create-jmx-secrets.sh           # Step 1 — imperative, never commits the password
+├── create-jmx-secrets.sh           # Step 1 — JMX auth secrets (imperative, never committed)
+└── create-kminion-user-and-acls.sh # Step 5 — kminion SASL user + read-only monitoring ACLs
 ```

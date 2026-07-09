@@ -1,0 +1,95 @@
+# kminion — a lightweight (Go) Kafka exporter that produces the ONE thing broker JMX does not:
+# true consumer-group lag (committed offset vs. log-end offset, per group/topic/partition).
+# Broker JMX exposes replication/throughput/request metrics but NOT external consumer-group
+# lag — that's why an exporter like this (or kafka-lag-exporter / Burrow) is standard in prod.
+#
+# Connects to the cluster over the SAME TLS + SASL/PLAIN the brokers require, using the 'client'
+# principal (kminion-sasl secret) and the cert-manager CA (ca-pair-sslcerts, PEM ca.crt).
+# The client principal needs ACLs to describe groups/topics — see observability/README.md.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kminion-config
+  namespace: confluent
+data:
+  config.yaml: |
+    kafka:
+      brokers:
+        - kafka:9071
+      clientId: kminion
+      tls:
+        enabled: true
+        caFilepath: /etc/kminion/ca/ca.crt
+      sasl:
+        enabled: true
+        mechanism: PLAIN
+        username: kminion
+        # password comes from the KMINION_KAFKA_SASL_PASSWORD env var (kminion-sasl secret)
+    minion:
+      consumerGroups:
+        enabled: true
+        scrapeMode: adminApi
+        granularity: partition
+      topics:
+        granularity: partition
+        infoMetric:
+          configKeys: [cleanup.policy]
+    exporter:
+      host: ""
+      port: 8080
+      namespace: kminion
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kminion
+  namespace: confluent
+  labels: {app: kminion}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: kminion}
+  template:
+    metadata:
+      labels: {app: kminion}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+    spec:
+      containers:
+        - name: kminion
+          image: redpandadata/kminion:v2.2.9
+          ports:
+            - {containerPort: 8080, name: metrics}
+          env:
+            - name: CONFIG_FILEPATH
+              value: /etc/kminion/config/config.yaml
+            # kminion overrides config from env vars by the yaml path, upper-cased, dot->underscore,
+            # NO prefix: kafka.sasl.password -> KAFKA_SASL_PASSWORD.
+            - name: KAFKA_SASL_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: kminion-sasl, key: password}
+          volumeMounts:
+            - {name: config, mountPath: /etc/kminion/config}
+            - {name: ca, mountPath: /etc/kminion/ca}
+          resources:
+            requests: {cpu: "15m", memory: "64Mi"}
+            limits: {cpu: "150m", memory: "192Mi"}
+      volumes:
+        - name: config
+          configMap: {name: kminion-config}
+        - name: ca
+          secret:
+            secretName: ca-pair-sslcerts
+            items: [{key: ca.crt, path: ca.crt}]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kminion
+  namespace: confluent
+  labels: {app: kminion}
+spec:
+  selector: {app: kminion}
+  ports:
+    - {port: 8080, targetPort: 8080, name: metrics}

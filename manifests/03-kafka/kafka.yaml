@@ -10,6 +10,15 @@ metadata:
 spec:
   # 3 brokers = classic HA minimum; replication-factor-3 topics stay up even if one broker goes down.
   replicas: 3
+  # ACL authorization (native CFK support, no SASL/SCRAM needed — ACLs work with any SASL
+  # mechanism, PLAIN included). With this enabled, every principal except superUsers is
+  # denied by default unless an explicit ACL grants it (see README - Authorization/ACLs).
+  # 'kafka' is the interbroker principal (kafka-credential) — it MUST be a superuser or
+  # brokers can't talk to each other.
+  authorization:
+    type: simple
+    superUsers:
+      - User:kafka
   dataVolumeCapacity: 20Gi
   image:
     application: confluentinc/cp-server:8.3.0

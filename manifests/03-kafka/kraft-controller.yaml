@@ -11,6 +11,16 @@ metadata:
 spec:
   # KRaft rule: controller count must be ODD and >=3 (Raft majority quorum).
   replicas: 3
+  # ACL-management requests (CREATE_ACLS/DELETE_ACLS) are forwarded from brokers to the
+  # active KRaft controller, which authorizes them against ITS OWN superUsers list — not the
+  # Kafka CR's. 'kafka' must be listed here too, or 'kafka-acls --add' fails with
+  # "CREATE_ACLS needs ALTER permission" even though 'kafka' is already a Kafka-side
+  # superuser (confirmed by testing; Confluent's own example leaves this empty, which does
+  # NOT work in practice for a Kafka superuser that also needs to manage ACLs).
+  authorization:
+    type: simple
+    superUsers:
+      - User:kafka
   dataVolumeCapacity: 10Gi
   image:
     application: confluentinc/cp-server:8.3.0

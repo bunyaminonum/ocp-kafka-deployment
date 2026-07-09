@@ -19,6 +19,16 @@ cluster'ına taşınmadan önce mantığın anlaşılması amaçlandı.
 > (pull-based GitOps) ile sertleştirilmiş, canlı test edilmiş hali var —
 > bkz. [`prod-deployment/README.md`](prod-deployment/README.md).
 
+## İki dağıtım profili
+
+Bu repo, aynı `confluent` namespace'i için **iki alternatif** dağıtım profili içerir
+(ikisi aynı anda değil, birini seç):
+
+| Profil | Klasör | Güvenlik | Otomasyon | Kullanım |
+|---|---|---|---|---|
+| **Quickstart** | [`manifests/`](manifests/) | PLAINTEXT (yok) | GitHub Actions (push) | Öğrenme / hızlı deneme |
+| **Production** | [`prod-deployment/`](prod-deployment/) | Custom SCC + TLS + SASL | ArgoCD (pull GitOps) | Sertleştirilmiş, uygulanmaya-hazır |
+
 ## İçindekiler
 
 1. [Mimari özeti](#mimari-özeti)

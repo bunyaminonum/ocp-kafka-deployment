@@ -1,23 +1,19 @@
-# Custom SCC for Confluent components on OpenShift.
-# Kaynak: https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/security/openshift-security/scc.yaml
-#
-# Playground'daki "podSecurity.enabled=false" (Default SCC) yaklaşımının YERİNE geçer.
-# Burada UID/GID aralığını AÇIKÇA sınırlandırıyoruz: CFK'nın istediği sabit UID 1001,
-# bu SCC'nin izin verdiği aralığın (1000-1005) içinde kalıyor — yani restricted-v2'yi
-# ezmeden, kurumun onayladığı dar bir aralıkta güvenle çalışıyoruz.
+# Custom SCC — Confluent bileşenleri için sınırlı UID/GID aralığı.
+# CFK pod'ları sabit UID 1001 ister; OpenShift 'restricted-v2' buna izin vermez.
+# Bu SCC 1000-1005 aralığını açar ve YALNIZCA Kafka'nın ServiceAccount'larına bağlanır
+# (bkz. README — 'oc adm policy add-scc-to-user'). Böylece 'podSecurity.enabled=false'
+# gibi geniş bir gevşetmeye gerek kalmadan, dar ve denetimli bir izin veririz.
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
-  name: confluent-prod
+  name: confluent-scc
   annotations:
-    kubernetes.io/description: "Confluent Kafka (KRaft) prod bileşenleri için sınırlı UID/GID aralıklı SCC"
+    kubernetes.io/description: "Confluent Kafka (KRaft) bileşenleri için sınırlı UID/GID aralıklı SCC"
 priority: 10
-# UID: sadece 1000-1005 aralığına izin (CFK varsayılanı 1001 bu aralıkta)
 runAsUser:
   type: MustRunAsRange
   uidRangeMin: 1000
   uidRangeMax: 1005
-# fsGroup: sadece 1001-1005
 fsGroup:
   type: MustRunAs
   ranges:
@@ -29,7 +25,7 @@ supplementalGroups:
   type: RunAsAny
 requiredDropCapabilities:
   - MKNOD
-# Sadece Kafka'nın ihtiyaç duyduğu volume tipleri (hostPath gibi tehlikeli olanlar YOK)
+# Sadece Kafka'nın ihtiyaç duyduğu volume tipleri (hostPath gibi tehlikeli olanlar yok).
 volumes:
   - configMap
   - downwardAPI
@@ -37,7 +33,3 @@ volumes:
   - persistentVolumeClaim
   - projected
   - secret
-# NOT: 'groups' veya 'users' bilerek burada tanımlanmadı — SCC'yi belirli
-# ServiceAccount'lara 'oc adm policy add-scc-to-user' ile açıkça bağlayacağız
-# (bkz. prod-deployment/README.md). Böylece bu SCC sadece Confluent SA'larına uygulanır,
-# cluster'daki herkese değil.

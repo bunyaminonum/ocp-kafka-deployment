@@ -1,7 +1,10 @@
+# ArgoCD Application — YALNIZCA Kafka manifest klasörünü (prod-deployment/kafka) izler.
+# Namespace/SCC/cert-manager/operatör (bootstrap katmanı) BİLEREK kapsam dışı: onlar bir
+# kere elle/platform ekibince kurulur, her Kafka değişikliğinde tekrar dokunulmaz.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: kafka-prod
+  name: kafka
   namespace: openshift-gitops
 spec:
   project: default
@@ -11,8 +14,8 @@ spec:
     path: prod-deployment/kafka
   destination:
     server: https://kubernetes.default.svc
-    namespace: confluent-prod
+    namespace: confluent
   syncPolicy:
     automated:
-      prune: true
-      selfHeal: true
+      prune: true      # git'ten silinen kaynak cluster'dan da silinir
+      selfHeal: true   # elle yapılan değişiklikler git'teki hale otomatik geri döndürülür

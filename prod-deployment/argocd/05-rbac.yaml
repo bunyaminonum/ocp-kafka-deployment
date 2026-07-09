@@ -1,4 +1,4 @@
-# ArgoCD'nin application-controller ServiceAccount'una, SADECE confluent-prod
+# ArgoCD'nin application-controller ServiceAccount'una, SADECE confluent
 # namespace'inde SADECE Kafka/KRaftController kaynaklarını yönetme izni veriyoruz.
 # Aynı least-privilege mantığı: GitHub Actions için manifests/rbac-github-actions.yaml'da
 # yaptığımızın birebir aynısı, sadece kimlik (ArgoCD'nin SA'sı) farklı.
@@ -9,7 +9,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: argocd-confluent-deployer
-  namespace: confluent-prod
+  namespace: confluent
 rules:
   - apiGroups: ["platform.confluent.io"]
     resources: ["kafkas", "kraftcontrollers"]
@@ -19,7 +19,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: argocd-confluent-deployer
-  namespace: confluent-prod
+  namespace: confluent
 subjects:
   - kind: ServiceAccount
     name: openshift-gitops-argocd-application-controller

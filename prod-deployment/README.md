@@ -39,12 +39,12 @@ gelir. Bu ayrımı baştan netleştirdik:
                                  ▼
                     ┌─────────────────────────┐
                     │   ArgoCD Application      │  (openshift-gitops ns)
-                    │   'kafka-prod'            │  selfHeal + auto-prune
+                    │   'kafka'            │  selfHeal + auto-prune
                     └────────────┬─────────────┘
                                  │ apply (RBAC ile sınırlı)
                                  ▼
         ┌────────────────────────────────────────────┐
-        │            confluent-prod namespace          │
+        │            confluent namespace          │
         │  ┌──────────────┐      ┌──────────────────┐ │
         │  │ KRaftController│◄────┤   Kafka (3 broker) │ │
         │  │  (3 pod, TLS)  │TLS  │  (TLS+SASL/PLAIN)  │ │
@@ -62,11 +62,11 @@ Dosyalar: [`infra/namespace.yaml`](infra/namespace.yaml), [`infra/scc.yaml`](inf
 ```bash
 oc apply -f prod-deployment/infra/namespace.yaml
 oc apply -f prod-deployment/infra/scc.yaml
-oc adm policy add-scc-to-user confluent-prod -z confluent-operator -n confluent-prod
-oc adm policy add-scc-to-user confluent-prod -z default -n confluent-prod
+oc adm policy add-scc-to-user confluent-scc -z confluent-operator -n confluent
+oc adm policy add-scc-to-user confluent-scc -z default -n confluent
 
 helm upgrade --install confluent-operator confluentinc/confluent-for-kubernetes \
-  --namespace confluent-prod \
+  --namespace confluent \
   --set serviceAccount.create=true \
   --set serviceAccount.name=confluent-operator
 ```
@@ -78,7 +78,7 @@ ile bağladık — CFK'nın varsayılan sabit UID 1001'i bu aralığın içinde 
 `podSecurityContext` override'ına gerek kalmadı.
 
 **Doğrulama:** `oc get pod kafka-0 -o jsonpath='{.metadata.annotations.openshift\.io/scc}'`
-→ `confluent-prod` döner (`anyuid` veya `restricted-v2`'ye düşmediğinin kanıtı).
+→ `confluent-scc` döner (`anyuid` veya `restricted-v2`'ye düşmediğinin kanıtı).
 
 ## FAZ 2 — cert-manager ile TLS
 
@@ -114,9 +114,9 @@ doğrulanmış bir CFK gerçeği.
 
 Credential secret'ları imperatif olarak oluşturuldu (asla git'e commit edilmedi):
 ```bash
-oc create secret generic kraft-credential -n confluent-prod \
+oc create secret generic kraft-credential -n confluent \
   --from-file=plain-users.json=... --from-file=plain-interbroker.txt=...
-oc create secret generic kafka-credential -n confluent-prod \
+oc create secret generic kafka-credential -n confluent \
   --from-file=plain-users.json=... --from-file=plain-interbroker.txt=...
 ```
 - `kraft-credential`: KRaftController ve Kafka'nın `controllerListener` bölümü **aynı**
@@ -154,7 +154,7 @@ instance'ı oluşturdu).
 oc apply -f prod-deployment/argocd/00-gitops-operator.yaml
 # CSV Succeeded olana kadar bekle
 
-oc apply -f prod-deployment/argocd/05-rbac.yaml    # ArgoCD'ye confluent-prod'da izin ver
+oc apply -f prod-deployment/argocd/05-rbac.yaml    # ArgoCD'ye confluent'da izin ver
 oc apply -f prod-deployment/argocd/10-application.yaml
 ```
 
@@ -175,11 +175,11 @@ kurumsal pratiktir.
 CFK'nın ürettiği truststore ile gerçek bir authenticated+encrypted produce/consume yapıldı:
 
 ```bash
-oc exec -n confluent-prod kafka-0 -- kafka-topics --bootstrap-server kafka:9071 \
+oc exec -n confluent kafka-0 -- kafka-topics --bootstrap-server kafka:9071 \
   --command-config /tmp/client.properties --create --topic <test-topic> --partitions 3 --replication-factor 3
-oc exec -n confluent-prod kafka-0 -- kafka-console-producer --bootstrap-server kafka:9071 \
+oc exec -n confluent kafka-0 -- kafka-console-producer --bootstrap-server kafka:9071 \
   --topic <test-topic> --command-config /tmp/client.properties
-oc exec -n confluent-prod kafka-0 -- kafka-console-consumer --bootstrap-server kafka:9071 \
+oc exec -n confluent kafka-0 -- kafka-console-consumer --bootstrap-server kafka:9071 \
   --topic <test-topic> --from-beginning --command-config /tmp/client.properties
 ```
 **Sonuç:** Mesaj uçtan uca üretilip okundu (`Processed a total of 1 messages`). Ayrıca
@@ -193,8 +193,8 @@ sonuç aynı: yetkisiz erişim çalışmıyor; kafka-0'ın asıl broker process'
 Kafka CR'ına git üzerinden bir annotation eklendi, **hiç `oc apply` çalıştırılmadan**:
 ```bash
 git commit -am "..." && git push
-oc annotate application kafka-prod -n openshift-gitops argocd.argoproj.io/refresh=hard --overwrite
-oc get kafka kafka -n confluent-prod -o jsonpath='{.metadata.annotations.gitops-canli-test}'
+oc annotate application kafka -n openshift-gitops argocd.argoproj.io/refresh=hard --overwrite
+oc get kafka kafka -n confluent -o jsonpath='{.metadata.annotations.gitops-canli-test}'
 ```
 **Sonuç:** Annotation cluster'daki gerçek objede göründü — git → ArgoCD → cluster zincirinin
 insan müdahalesi olmadan çalıştığının kanıtı.
@@ -221,7 +221,7 @@ kopyalanan komutlar bu yüzden hata verdi — TLS/SASL ile ilgisi yoktu, sadece 
 
 ### 4. Tek node'da ArgoCD'nin varsayılan kaynak istekleri sığmadı
 OpenShift'in kendi sistem pod'ları (etcd, apiserver, ingress vb.) tek node'da zaten ~2.4 CPU
-tüketiyor. `confluent-prod` (2.5 CPU) + ArgoCD'nin varsayılan istekleri (her bileşen 250m,
+tüketiyor. `confluent` (2.5 CPU) + ArgoCD'nin varsayılan istekleri (her bileşen 250m,
 +dex) toplamı node'un 5.8 CPU'luk kapasitesini aştı → `Insufficient cpu`, birden fazla
 ArgoCD pod'u `Pending` kaldı. Çözüm: `ArgoCD` CR'ını patch'leyip her bileşenin isteğini
 düşürdük, kullanmadığımız `dex`/SSO'yu tamamen kapattık (`spec.sso: null`).
@@ -238,7 +238,7 @@ kilitlenmesi" genel bir Kubernetes bilgisi olarak değerli.
 
 ### 5. ArgoCD, Kafka CR'larını patch edemedi: RBAC eksik
 `system:serviceaccount:openshift-gitops:openshift-gitops-argocd-application-controller`
-kimliğinin `confluent-prod` namespace'inde `kafkas`/`kraftcontrollers` üzerinde hiç yetkisi
+kimliğinin `confluent` namespace'inde `kafkas`/`kraftcontrollers` üzerinde hiç yetkisi
 yoktu (`Forbidden`). Çözüm: GitHub Actions için yazdığımız least-privilege RBAC
 deseninin birebir aynısını (bkz. [`argocd/05-rbac.yaml`](argocd/05-rbac.yaml)) ArgoCD'nin
 kimliğine de tanımladık.
@@ -254,7 +254,7 @@ gerçek kaynak, orada olmayan bir şey cluster'a asla yansımaz.
 ```
 prod-deployment/
 ├── infra/
-│   ├── namespace.yaml       # confluent-prod namespace
+│   ├── namespace.yaml       # confluent namespace
 │   └── scc.yaml              # Custom SecurityContextConstraints
 ├── cert-manager/
 │   ├── 00-namespace-and-operator.yaml   # Red Hat cert-manager operatörü (OLM)
@@ -264,7 +264,7 @@ prod-deployment/
 │   └── kafka.yaml              # TLS+SASL+resources+affinity ile Kafka
 └── argocd/
     ├── 00-gitops-operator.yaml  # Red Hat OpenShift GitOps operatörü (OLM)
-    ├── 05-rbac.yaml              # ArgoCD'nin confluent-prod'daki yetkisi (manuel uygulanır)
+    ├── 05-rbac.yaml              # ArgoCD'nin confluent'daki yetkisi (manuel uygulanır)
     └── 10-application.yaml       # ArgoCD Application (sadece kafka/ klasörünü izler)
 ```
 

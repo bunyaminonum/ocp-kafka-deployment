@@ -1,14 +1,14 @@
-# Custom SCC — Confluent bileşenleri için sınırlı UID/GID aralığı.
-# CFK pod'ları sabit UID 1001 ister; OpenShift 'restricted-v2' buna izin vermez.
-# Bu SCC 1000-1005 aralığını açar ve YALNIZCA Kafka'nın ServiceAccount'larına bağlanır
-# (bkz. README — 'oc adm policy add-scc-to-user'). Böylece 'podSecurity.enabled=false'
-# gibi geniş bir gevşetmeye gerek kalmadan, dar ve denetimli bir izin veririz.
+# Custom SCC — restricted UID/GID range for Confluent components.
+# CFK pods require a fixed UID 1001; OpenShift's 'restricted-v2' policy does not allow that.
+# This SCC opens the 1000-1005 range and is bound ONLY to Kafka's ServiceAccounts
+# (see README — 'oc adm policy add-scc-to-user'). This gives us a narrow, audited
+# permission instead of a broad relaxation like 'podSecurity.enabled=false'.
 apiVersion: security.openshift.io/v1
 kind: SecurityContextConstraints
 metadata:
   name: confluent-scc
   annotations:
-    kubernetes.io/description: "Confluent Kafka (KRaft) bileşenleri için sınırlı UID/GID aralıklı SCC"
+    kubernetes.io/description: "Restricted UID/GID range SCC for Confluent Kafka (KRaft) components"
 priority: 10
 runAsUser:
   type: MustRunAsRange
@@ -25,7 +25,7 @@ supplementalGroups:
   type: RunAsAny
 requiredDropCapabilities:
   - MKNOD
-# Sadece Kafka'nın ihtiyaç duyduğu volume tipleri (hostPath gibi tehlikeli olanlar yok).
+# Only the volume types Kafka actually needs (no hostPath or other risky types).
 volumes:
   - configMap
   - downwardAPI

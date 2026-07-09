@@ -1,10 +1,10 @@
-# ArgoCD'nin application-controller ServiceAccount'una, SADECE confluent
-# namespace'inde SADECE Kafka/KRaftController kaynaklarını yönetme izni veriyoruz.
-# Aynı least-privilege mantığı: GitHub Actions için manifests/rbac-github-actions.yaml'da
-# yaptığımızın birebir aynısı, sadece kimlik (ArgoCD'nin SA'sı) farklı.
-# Bu dosya BİLEREK Application tarafından senkronize edilmiyor — ArgoCD'nin kendi
-# kendine yetki vermesi (privilege escalation) güvenlik açısından yanlış olur;
-# bu, platform/bootstrap katmanının (manuel oc apply) bir parçası.
+# Grants ArgoCD's application-controller ServiceAccount permission to manage
+# ONLY Kafka/KRaftController resources, ONLY in the confluent namespace.
+# Same least-privilege pattern as manifests/rbac-github-actions.yaml (used for
+# GitHub Actions) — same idea, just a different identity (ArgoCD's SA).
+# This file is DELIBERATELY NOT synced by the Application itself — a controller
+# granting itself its own permissions would be a privilege-escalation anti-pattern;
+# this belongs to the platform/bootstrap layer (applied manually via oc apply).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:

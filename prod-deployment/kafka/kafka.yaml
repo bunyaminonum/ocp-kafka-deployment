@@ -1,14 +1,14 @@
-# Kafka — güvenli (TLS + SASL/PLAIN), 3 broker'lı cluster (KRaft moduna bağlı).
-# internal listener: uygulamaların (producer/consumer) bağlandığı, TLS+SASL korumalı port.
-# controllerListener: KRaftController CR'ındaki 'listeners.controller' ile BİREBİR eşleşmeli
-#      (aynı secretRef + tls) — eşleşmezse Kafka controller'a bağlanamaz.
+# Kafka — secured (TLS + SASL/PLAIN), 3-broker cluster (bound to KRaft mode).
+# internal listener: the TLS+SASL protected port that applications (producer/consumer) connect to.
+# controllerListener: must match the KRaftController CR's 'listeners.controller' EXACTLY
+#      (same secretRef + tls) — otherwise Kafka cannot connect to the controller.
 apiVersion: platform.confluent.io/v1beta1
 kind: Kafka
 metadata:
   name: kafka
   namespace: confluent
 spec:
-  # 3 broker = klasik HA minimumu; replication-factor 3 topic'ler bir broker düşse de ayakta.
+  # 3 brokers = classic HA minimum; replication-factor-3 topics stay up even if one broker goes down.
   replicas: 3
   dataVolumeCapacity: 20Gi
   image:

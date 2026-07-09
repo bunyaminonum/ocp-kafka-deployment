@@ -1,6 +1,7 @@
-# ArgoCD Application — YALNIZCA Kafka manifest klasörünü (prod-deployment/kafka) izler.
-# Namespace/SCC/cert-manager/operatör (bootstrap katmanı) BİLEREK kapsam dışı: onlar bir
-# kere elle/platform ekibince kurulur, her Kafka değişikliğinde tekrar dokunulmaz.
+# ArgoCD Application — watches ONLY the Kafka manifest folder (prod-deployment/kafka).
+# Namespace/SCC/cert-manager/operator (the bootstrap layer) are DELIBERATELY out of scope:
+# those are installed once, manually / by the platform team, and aren't touched on every
+# Kafka change.
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -17,5 +18,5 @@ spec:
     namespace: confluent
   syncPolicy:
     automated:
-      prune: true      # git'ten silinen kaynak cluster'dan da silinir
-      selfHeal: true   # elle yapılan değişiklikler git'teki hale otomatik geri döndürülür
+      prune: true      # a resource removed from git is also removed from the cluster
+      selfHeal: true    # manual changes are automatically reverted back to the git state

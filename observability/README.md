@@ -111,11 +111,26 @@ needed once the fixed UID requirement is removed).
 ```bash
 ./observability/setup-grafana-dashboards.sh confluent
 ```
-Adds Prometheus as a datasource and imports Confluent's official
-[`confluent-platform.json`](https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/monitoring/grafana-dashboard/confluent-platform.json)
-and
-[`confluent-operator.json`](https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/monitoring/grafana-dashboard/confluent-operator.json)
-dashboards via the Grafana HTTP API (no manual UI clicking required, and re-runnable).
+Adds Prometheus as a datasource and imports **three** dashboards via the Grafana HTTP API
+(no manual UI clicking, re-runnable):
+
+- [`kafka-kraft-dashboard.json`](kafka-kraft-dashboard.json) — **this repo's own dashboard**,
+  the recommended one. Hand-built for exactly this stack from metric names verified against
+  the live Prometheus (no invented queries). Five rows: Cluster Health (stat panels — active
+  controllers, under-replicated partitions, online brokers, raft voters), Kafka Throughput
+  (bytes/messages per broker), Kafka Broker Internals (partition/leader balance, idle %,
+  request latency p99, request rate by type, queue depth), KRaft Controller / Raft Quorum
+  (which pod is leader, log-end offset vs high-watermark, epoch, commit latency, voters), and
+  JVM & System (heap, GC time, CPU). Every one of its 32 panel queries was confirmed to
+  return data through Grafana's own query API before committing.
+- Confluent's official
+  [`confluent-platform.json`](https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/monitoring/grafana-dashboard/confluent-platform.json)
+  and
+  [`confluent-operator.json`](https://github.com/confluentinc/confluent-kubernetes-examples/blob/master/monitoring/grafana-dashboard/confluent-operator.json)
+  — imported as-is (patched on the fly, see below) for comparison.
+
+In Grafana the repo dashboard is titled **"Kafka (KRaft) — Cluster Overview"**; pick your
+namespace from the `namespace` dropdown at the top.
 
 ## Accessing Grafana
 
@@ -177,6 +192,7 @@ observability/
 ├── prometheus-values.yaml          # Helm values for prometheus-community/prometheus
 ├── grafana-values.yaml             # Helm values for grafana/grafana
 ├── grafana-route.yaml              # OpenShift Route (the chart creates none)
+├── kafka-kraft-dashboard.json      # this repo's own dashboard (5 rows, 32 verified panels)
 └── setup-grafana-dashboards.sh     # datasource + dashboard import via Grafana's HTTP API
 scripts/
 └── create-jmx-secrets.sh           # Step 1 — imperative, never commits the password

@@ -16,6 +16,13 @@ gerektiğini ayırt ediyor.
 **Bu playbook'u uygulayan kişi, kurumun kendi OCP ortamının detaylarını bilmiyor
 olabilir** — bu yüzden her adımda "bunu yapmadan önce şunu bil/sor" notları var.
 
+> **Güncelleme:** Aşağıdaki Adım 6'da "yapılacaklar" olarak listelenen TLS, SASL ve
+> GitOps artık [`prod-deployment/`](../prod-deployment/) klasöründe **gerçekten kurulup
+> canlı test edildi** (Custom SCC, cert-manager TLS, SASL/PLAIN, ArgoCD). O klasördeki
+> [README](../prod-deployment/README.md), karşılaşılan gerçek sorunları (RBAC, kaynak
+> sıkışıklığı, secret format hataları) da içeriyor — kurumsal ortama geçerken en çok
+> o dokümana bakılmalı, burası daha çok genel checklist'tir.
+
 ---
 
 ## Adım 0 — Başlamadan önce: platform/DevOps ekibiyle netleştirilmesi gerekenler

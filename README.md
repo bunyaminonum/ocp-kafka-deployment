@@ -12,6 +12,12 @@ cluster'ına taşınmadan önce mantığın anlaşılması amaçlandı.
 > yaptığımız her adımı (CRC kurulumu dahil) anlatır. Gerçek bir kurumsal OCP ortamında
 > hangi adımların atlanacağını, hangilerinin platform ekibiyle netleştirilmesi gerektiğini
 > ayrı ve sadeleştirilmiş bir doküman olan [`docs/kurumsal-playbook.md`](docs/kurumsal-playbook.md)'da bul.
+>
+> **Güvenlik/GitOps sertleştirmesi:** Bu README'deki kurulum bilerek TLS/SASL'siz ve
+> GitHub Actions (push-based) ile deploy ediliyor. [`prod-deployment/`](prod-deployment/)
+> klasöründe AYNI Kafka KRaft cluster'ının Custom SCC + TLS + SASL/PLAIN + ArgoCD
+> (pull-based GitOps) ile sertleştirilmiş, canlı test edilmiş hali var —
+> bkz. [`prod-deployment/README.md`](prod-deployment/README.md).
 
 ## İçindekiler
 

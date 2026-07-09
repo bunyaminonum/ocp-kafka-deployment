@@ -46,7 +46,10 @@ for v in d.get('templating', {}).get('list', []):
         v['definition'] = q['query']
 print(json.dumps({'dashboard': d, 'overwrite': True, 'inputs': [{'name':'DS_PROMETHEUS','type':'datasource','pluginId':'prometheus','value':'Prometheus'}]}))
 " > "$TMP_DIR/import-$dash.json"
-  curl -s -u "admin:$GRAFANA_PASS" -X POST "http://localhost:$LOCAL_PORT/api/dashboards/db" \
+  # Must be /api/dashboards/import — the /api/dashboards/db endpoint silently ignores the
+  # 'inputs' mapping, leaving every panel pointing at an unresolved ${DS_PROMETHEUS}
+  # placeholder ("No data" on all panels). Confirmed the hard way.
+  curl -s -u "admin:$GRAFANA_PASS" -X POST "http://localhost:$LOCAL_PORT/api/dashboards/import" \
     -H "Content-Type: application/json" -d "@$TMP_DIR/import-$dash.json"
   echo
 done

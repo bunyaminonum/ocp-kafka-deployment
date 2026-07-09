@@ -6,6 +6,8 @@ kind: Kafka
 metadata:
   name: kafka
   namespace: confluent-prod
+  annotations:
+    gitops-canli-test: "argocd-otomatik-uyguladi"
 spec:
   replicas: 3
   dataVolumeCapacity: 20Gi

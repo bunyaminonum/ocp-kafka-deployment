@@ -624,6 +624,7 @@ observability/
 ├── prometheus-values.yaml         # Helm values (SCC + resource fixes explained)
 ├── grafana-values.yaml            # Helm values (SCC + resource fixes explained)
 ├── grafana-route.yaml             # OpenShift Route (the chart creates none)
+├── kafka-kraft-dashboard.json     # this repo's own Grafana dashboard (5 rows, 32 panels)
 └── setup-grafana-dashboards.sh    # datasource + dashboard import via Grafana's HTTP API
 scripts/
 ├── create-sasl-secrets.sh        # Step 4 — imperative, never commits passwords

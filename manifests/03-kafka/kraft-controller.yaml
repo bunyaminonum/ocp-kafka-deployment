@@ -21,6 +21,15 @@ spec:
     type: simple
     superUsers:
       - User:kafka
+  # Enables the JMX Prometheus exporter (:7778) + authenticated remote JMX (:7203).
+  # Secrets come from scripts/create-jmx-secrets.sh; full monitoring stack in observability/.
+  metrics:
+    jmx:
+      authentication:
+        secretRef: kafka-jmx-password
+      accessControl:
+        enabled: true
+        secretRef: kafka-jmx-access
   dataVolumeCapacity: 10Gi
   image:
     application: confluentinc/cp-server:8.3.0

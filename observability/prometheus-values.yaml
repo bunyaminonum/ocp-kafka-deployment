@@ -20,16 +20,24 @@ server:
   persistentVolume:
     enabled: false
 
-  # Sized to fit the ~89m of free CPU this node had at the time — not a real sizing
-  # recommendation, just what fit. A production Prometheus needs far more (retention,
-  # cardinality, query load).
+  # Default is 15d. On an emptyDir with the label cardinality this stack produces (per-topic,
+  # per-partition, per-request-type, kminion per-group/partition lag = thousands of series),
+  # 15d of WAL/TSDB grew to 400MB+ within ~7h and OOMKilled the pod on every restart (WAL
+  # replay alone needs more memory than the steady-state process) - a genuine CrashLoopBackOff
+  # hit while running this stack. A demo dashboard doesn't need historical data; short
+  # retention keeps the WAL small enough to always replay within the memory limit below.
+  retention: "6h"
+
+  # Bumped from the original 30m/256Mi-300m/512Mi after the OOMKill above - WAL replay on
+  # startup needs headroom beyond steady-state scrape/query load. Node had ~5.6GB free memory
+  # at the time (77% of ~23.5GB allocatable used), so this fits comfortably.
   resources:
     requests:
       cpu: 30m
-      memory: 256Mi
+      memory: 384Mi
     limits:
       cpu: 300m
-      memory: 512Mi
+      memory: 1Gi
 
   # The chart's default runs as a fixed UID (65534, 'nobody') which OpenShift's SCCs reject
   # outright (same class of problem as Kafka's own UID 1001 - see README, Step 1). Nulling

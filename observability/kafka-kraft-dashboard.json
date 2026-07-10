@@ -56,6 +56,27 @@
         "refresh": 2
       },
       {
+        "name": "controller",
+        "type": "query",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(kafka_controller_kafkacontroller_value{app=\"kraftcontroller\",namespace=\"$namespace\"}, pod)",
+          "refId": "E"
+        },
+        "definition": "label_values(kafka_controller_kafkacontroller_value{app=\"kraftcontroller\",namespace=\"$namespace\"}, pod)",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2
+      },
+      {
         "name": "topic",
         "type": "query",
         "multi": true,
@@ -134,7 +155,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_controller_kafkacontroller_value{name=\"ActiveControllerCount\",app=\"kraftcontroller\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_controller_kafkacontroller_value{name=\"ActiveControllerCount\",app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -458,7 +479,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(kafka_server_raft_metrics_number_of_voters{namespace=\"$namespace\"})",
+          "expr": "max(kafka_server_raft_metrics_number_of_voters{pod=~\"$controller\",namespace=\"$namespace\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -2647,7 +2668,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_controller_kafkacontroller_value{name=\"ActiveControllerCount\",app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_controller_kafkacontroller_value{name=\"ActiveControllerCount\",app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "editorMode": "code",
@@ -2707,7 +2728,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_log_end_offset{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_log_end_offset{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} log-end",
           "refId": "A",
           "editorMode": "code",
@@ -2718,7 +2739,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_high_watermark{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_high_watermark{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} high-watermark",
           "refId": "B",
           "editorMode": "code",
@@ -2778,7 +2799,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_current_epoch{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_current_epoch{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} epoch",
           "refId": "A",
           "editorMode": "code",
@@ -2789,7 +2810,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_controller_controllerstats_oneminuterate{name=\"UncleanLeaderElectionsPerSec\",app=\"kraftcontroller\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_controller_controllerstats_oneminuterate{name=\"UncleanLeaderElectionsPerSec\",app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"})",
           "legendFormat": "unclean-elections/s",
           "refId": "B",
           "editorMode": "code",
@@ -2849,7 +2870,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_commit_latency_avg{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_commit_latency_avg{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} avg",
           "refId": "A",
           "editorMode": "code",
@@ -2860,7 +2881,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_commit_latency_max{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_commit_latency_max{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} max",
           "refId": "B",
           "editorMode": "code",
@@ -2920,7 +2941,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_append_records_rate{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_append_records_rate{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} append",
           "refId": "A",
           "editorMode": "code",
@@ -2931,7 +2952,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_fetch_records_rate{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_fetch_records_rate{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} fetch",
           "refId": "B",
           "editorMode": "code",
@@ -2991,7 +3012,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_number_of_voters{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_number_of_voters{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} voters",
           "refId": "A",
           "editorMode": "code",
@@ -3002,7 +3023,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_raft_metrics_number_of_observers{app=\"kraftcontroller\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_raft_metrics_number_of_observers{app=\"kraftcontroller\",pod=~\"$controller\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} observers",
           "refId": "B",
           "editorMode": "code",

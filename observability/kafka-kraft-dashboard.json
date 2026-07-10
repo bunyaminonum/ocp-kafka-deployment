@@ -35,6 +35,27 @@
         "refresh": 1
       },
       {
+        "name": "broker",
+        "type": "query",
+        "multi": true,
+        "includeAll": true,
+        "allValue": ".*",
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${DS_PROMETHEUS}"
+        },
+        "query": {
+          "query": "label_values(kafka_server_replicamanager_value{namespace=\"$namespace\"}, pod)",
+          "refId": "D"
+        },
+        "definition": "label_values(kafka_server_replicamanager_value{namespace=\"$namespace\"}, pod)",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "refresh": 2
+      },
+      {
         "name": "topic",
         "type": "query",
         "multi": true,
@@ -181,7 +202,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "count(kafka_server_replicamanager_value{name=\"LeaderCount\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "count(kafka_server_replicamanager_value{name=\"LeaderCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -245,7 +266,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_replicamanager_value{name=\"UnderReplicatedPartitions\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_server_replicamanager_value{name=\"UnderReplicatedPartitions\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -309,7 +330,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_replicamanager_value{name=\"OfflineReplicaCount\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_server_replicamanager_value{name=\"OfflineReplicaCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -373,7 +394,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_replicamanager_value{name=\"AtMinIsrPartitionCount\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_server_replicamanager_value{name=\"AtMinIsrPartitionCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -561,7 +582,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesInPerSec\",app=\"kafka\",namespace=\"$namespace\",topic=\"\"})",
+          "expr": "sum(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesInPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\",topic=\"\"})",
           "legendFormat": "",
           "refId": "A",
           "editorMode": "code",
@@ -956,7 +977,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (topic)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesInPerSec\",topic=~\"$topic\",namespace=\"$namespace\"})",
+          "expr": "sum by (topic)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesInPerSec\",topic=~\"$topic\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "{{topic}}",
           "refId": "A",
           "editorMode": "code",
@@ -1016,7 +1037,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (topic)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesOutPerSec\",topic=~\"$topic\",namespace=\"$namespace\"})",
+          "expr": "sum by (topic)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesOutPerSec\",topic=~\"$topic\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "{{topic}}",
           "refId": "A",
           "editorMode": "code",
@@ -1076,7 +1097,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (topic)(kafka_server_brokertopicmetrics_oneminuterate{name=\"MessagesInPerSec\",topic=~\"$topic\",namespace=\"$namespace\"})",
+          "expr": "sum by (topic)(kafka_server_brokertopicmetrics_oneminuterate{name=\"MessagesInPerSec\",topic=~\"$topic\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "{{topic}}",
           "refId": "A",
           "editorMode": "code",
@@ -1136,7 +1157,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",request=\"Produce\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",request=\"Produce\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "Produce",
           "refId": "A",
           "editorMode": "code",
@@ -1147,7 +1168,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",request=\"FetchConsumer\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",request=\"FetchConsumer\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "FetchConsumer",
           "refId": "B",
           "editorMode": "code",
@@ -1158,7 +1179,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",request=\"FetchFollower\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",request=\"FetchFollower\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "FetchFollower",
           "refId": "C",
           "editorMode": "code",
@@ -1218,7 +1239,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_brokertopicmetrics_oneminuterate{name=\"FailedProduceRequestsPerSec\",app=\"kafka\",namespace=\"$namespace\",topic=\"\"})",
+          "expr": "sum(kafka_server_brokertopicmetrics_oneminuterate{name=\"FailedProduceRequestsPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\",topic=\"\"})",
           "legendFormat": "FailedProduce",
           "refId": "A",
           "editorMode": "code",
@@ -1229,7 +1250,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_brokertopicmetrics_oneminuterate{name=\"FailedFetchRequestsPerSec\",app=\"kafka\",namespace=\"$namespace\",topic=\"\"})",
+          "expr": "sum(kafka_server_brokertopicmetrics_oneminuterate{name=\"FailedFetchRequestsPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\",topic=\"\"})",
           "legendFormat": "FailedFetch",
           "refId": "B",
           "editorMode": "code",
@@ -1289,7 +1310,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (pod)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesRejectedPerSec\",app=\"kafka\",namespace=\"$namespace\",topic=\"\"})",
+          "expr": "sum by (pod)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesRejectedPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\",topic=\"\"})",
           "legendFormat": "{{pod}}",
           "refId": "A",
           "editorMode": "code",
@@ -1735,7 +1756,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_replicamanager_oneminuterate{name=\"IsrShrinksPerSec\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_server_replicamanager_oneminuterate{name=\"IsrShrinksPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "shrinks",
           "refId": "A",
           "editorMode": "code",
@@ -1746,7 +1767,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_replicamanager_oneminuterate{name=\"IsrExpandsPerSec\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_server_replicamanager_oneminuterate{name=\"IsrExpandsPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "expands",
           "refId": "B",
           "editorMode": "code",
@@ -1806,7 +1827,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(kafka_server_replicamanager_oneminuterate{name=\"FailedIsrUpdatesPerSec\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum(kafka_server_replicamanager_oneminuterate{name=\"FailedIsrUpdatesPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "failed",
           "refId": "A",
           "editorMode": "code",
@@ -1866,7 +1887,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_replicamanager_value{name=\"PartitionCount\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_replicamanager_value{name=\"PartitionCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} partitions",
           "refId": "A",
           "editorMode": "code",
@@ -1877,7 +1898,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_replicamanager_value{name=\"LeaderCount\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_replicamanager_value{name=\"LeaderCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} leaders",
           "refId": "B",
           "editorMode": "code",
@@ -1950,7 +1971,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_requestmetrics_99thpercentile{name=\"TotalTimeMs\",request=\"Produce\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_requestmetrics_99thpercentile{name=\"TotalTimeMs\",request=\"Produce\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} Produce",
           "refId": "A",
           "editorMode": "code",
@@ -1961,7 +1982,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_requestmetrics_99thpercentile{name=\"TotalTimeMs\",request=\"FetchConsumer\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_requestmetrics_99thpercentile{name=\"TotalTimeMs\",request=\"FetchConsumer\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} FetchConsumer",
           "refId": "B",
           "editorMode": "code",
@@ -1972,7 +1993,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_requestmetrics_99thpercentile{name=\"TotalTimeMs\",request=\"Metadata\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_requestmetrics_99thpercentile{name=\"TotalTimeMs\",request=\"Metadata\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} Metadata",
           "refId": "C",
           "editorMode": "code",
@@ -2032,7 +2053,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"RequestQueueTimeMs\",request=\"Produce\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"RequestQueueTimeMs\",request=\"Produce\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "queue",
           "refId": "A",
           "editorMode": "code",
@@ -2043,7 +2064,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"LocalTimeMs\",request=\"Produce\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"LocalTimeMs\",request=\"Produce\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "local",
           "refId": "B",
           "editorMode": "code",
@@ -2054,7 +2075,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"RemoteTimeMs\",request=\"Produce\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"RemoteTimeMs\",request=\"Produce\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "remote",
           "refId": "C",
           "editorMode": "code",
@@ -2065,7 +2086,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"ResponseSendTimeMs\",request=\"Produce\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "max(kafka_network_requestmetrics_99thpercentile{name=\"ResponseSendTimeMs\",request=\"Produce\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "responseSend",
           "refId": "D",
           "editorMode": "code",
@@ -2125,7 +2146,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_server_kafkarequesthandlerpool_oneminuterate{name=\"RequestHandlerAvgIdlePercent\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_server_kafkarequesthandlerpool_oneminuterate{name=\"RequestHandlerAvgIdlePercent\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} req-handler",
           "refId": "A",
           "editorMode": "code",
@@ -2136,7 +2157,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_socketserver_value{name=\"NetworkProcessorAvgIdlePercent\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_socketserver_value{name=\"NetworkProcessorAvgIdlePercent\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} network",
           "refId": "B",
           "editorMode": "code",
@@ -2196,7 +2217,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (request)(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum by (request)(kafka_network_requestmetrics_oneminuterate{name=\"RequestsPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "{{request}}",
           "refId": "A",
           "editorMode": "code",
@@ -2256,7 +2277,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_requestchannel_value{name=\"RequestQueueSize\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_requestchannel_value{name=\"RequestQueueSize\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} request",
           "refId": "A",
           "editorMode": "code",
@@ -2267,7 +2288,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_requestchannel_value{name=\"ResponseQueueSize\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_requestchannel_value{name=\"ResponseQueueSize\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} response",
           "refId": "B",
           "editorMode": "code",
@@ -2327,7 +2348,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (delayedOperation)(kafka_server_delayedoperationpurgatory_value{name=\"PurgatorySize\",app=\"kafka\",namespace=\"$namespace\"})",
+          "expr": "sum by (delayedOperation)(kafka_server_delayedoperationpurgatory_value{name=\"PurgatorySize\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"})",
           "legendFormat": "{{delayedOperation}}",
           "refId": "A",
           "editorMode": "code",
@@ -2400,7 +2421,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_socketserver_value{name=\"MemoryPoolUsed\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_socketserver_value{name=\"MemoryPoolUsed\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} used",
           "refId": "A",
           "editorMode": "code",
@@ -2411,7 +2432,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_socketserver_value{name=\"MemoryPoolAvailable\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_socketserver_value{name=\"MemoryPoolAvailable\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} available",
           "refId": "B",
           "editorMode": "code",
@@ -2471,7 +2492,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_socketserver_value{name=\"ExpiredConnectionsKilledCount\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_socketserver_value{name=\"ExpiredConnectionsKilledCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} expired",
           "refId": "A",
           "editorMode": "code",
@@ -2482,7 +2503,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "kafka_network_socketserver_value{name=\"AgedConnectionsKilledCount\",app=\"kafka\",namespace=\"$namespace\"}",
+          "expr": "kafka_network_socketserver_value{name=\"AgedConnectionsKilledCount\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\"}",
           "legendFormat": "{{pod}} aged",
           "refId": "B",
           "editorMode": "code",
@@ -2542,7 +2563,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (pod)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesInPerSec\",app=\"kafka\",namespace=\"$namespace\",topic=\"\"})",
+          "expr": "sum by (pod)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesInPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\",topic=\"\"})",
           "legendFormat": "{{pod}} in",
           "refId": "A",
           "editorMode": "code",
@@ -2553,7 +2574,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (pod)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesOutPerSec\",app=\"kafka\",namespace=\"$namespace\",topic=\"\"})",
+          "expr": "sum by (pod)(kafka_server_brokertopicmetrics_oneminuterate{name=\"BytesOutPerSec\",app=\"kafka\",pod=~\"$broker\",namespace=\"$namespace\",topic=\"\"})",
           "legendFormat": "{{pod}} out",
           "refId": "B",
           "editorMode": "code",

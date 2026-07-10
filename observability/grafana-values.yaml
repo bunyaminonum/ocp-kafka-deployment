@@ -1,11 +1,17 @@
 # Helm values for grafana/grafana, trimmed for this practice cluster.
 # Install: helm upgrade --install grafana grafana/grafana -n confluent -f observability/grafana-values.yaml
 
-# No PVC — dashboards/datasources configured through the UI/API are lost on pod restart.
-# Acceptable for a practice/demo instance; production should persist this (or provision
-# datasources/dashboards declaratively instead of relying on runtime state at all).
+# A small PVC for Grafana's own SQLite DB (dashboards, datasources, users). Started as
+# `enabled: false` (emptyDir) - switched to a PVC after this node's chronic CPU pressure
+# (~99% allocated) caused the Grafana pod to be *preempted* twice to make room for other
+# pods (once for a Prometheus resource bump). With emptyDir, every preemption meant
+# re-running setup-grafana-dashboards.sh from scratch. A 200Mi PVC survives pod
+# rescheduling since it isn't tied to the pod's lifecycle like emptyDir is - the dashboards
+# and datasource now persist across the preemptions this environment keeps causing.
 persistence:
-  enabled: false
+  enabled: true
+  size: 200Mi
+  storageClassName: crc-csi-hostpath-provisioner
 
 # The default chart runs an init container (plain busybox, as root) that chowns the data
 # directory before the main container starts. Since we're letting OpenShift assign its own

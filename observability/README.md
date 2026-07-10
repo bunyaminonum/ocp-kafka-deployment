@@ -186,11 +186,18 @@ Adds Prometheus as a datasource and imports **three** dashboards via the Grafana
 In Grafana the repo dashboard is titled **"Kafka (KRaft) — Full Cluster & Consumer Lag"**;
 pick your namespace/topic/group from the dropdowns at the top.
 
-> **Note — Grafana has no persistence here** (`persistence.enabled: false`, for CPU/PVC
-> simplicity). If the Grafana pod is ever rescheduled (e.g. under node pressure), it comes
-> back empty — just re-run `setup-grafana-dashboards.sh` to restore the datasource and all
-> dashboards. Git is the source of truth, so nothing is lost. In production, enable a PVC or
-> provision dashboards declaratively.
+> **Note — Grafana runs with a PVC** (`persistence.enabled: true`, 200Mi). Started disabled
+> (emptyDir) but this node's chronic CPU pressure (~99% allocated) got the Grafana pod
+> **preempted twice** to make room for other pods — with emptyDir that meant re-running
+> `setup-grafana-dashboards.sh` from scratch each time. A small PVC survives pod
+> rescheduling since it isn't tied to the pod's lifecycle. Confirmed live: deleted the pod
+> outright, the replacement came back with the datasource and all three dashboards intact.
+> Git is still the source of truth for the dashboard JSON/values themselves — the PVC just
+> holds Grafana's own SQLite state (users, sessions, the loaded copies).
+>
+> If you ever see `401 "user token not found"` errors in the browser after a Grafana pod
+> replacement, that's a stale login session against a since-replaced backend — just log out
+> and back in.
 
 ## Accessing Grafana
 
@@ -231,6 +238,8 @@ but a plain Helm chart like this one does not.
 | kminion `PLAIN user and pass must be non-empty` | The SASL password env var name is wrong. kminion maps env to the config path uppercased, dot→underscore, **no prefix**: `kafka.sasl.password` → `KAFKA_SASL_PASSWORD` |
 | Grafana test queries all fail / "Data source not found" | The datasource UID changed (Grafana lost state on a restart, or was re-created). Always look the UID up fresh (`/api/datasources/name/Prometheus`), never cache it. Re-running `setup-grafana-dashboards.sh` recreates datasource + dashboards |
 | Every panel **No data**, and `oc get pods` shows Prometheus in `CrashLoopBackOff` (`Exit Code: 137`) | OOMKilled, not a dashboard problem. This stack's metric cardinality (per-topic, per-partition, per-request-type, kminion's per-group/partition lag) grows the on-disk WAL/TSDB fast — with no PVC (`emptyDir`) and the default 15d retention, it hit 400MB+ within ~7h and WAL replay on startup needed more memory than the 512Mi limit allowed, so it OOMed every restart before ever becoming ready. Fixed in `prometheus-values.yaml`: `server.retention: "6h"` (a demo dashboard doesn't need history) and the memory limit raised to `1Gi` (replay needs headroom beyond steady-state usage) — apply with `helm upgrade prometheus prometheus-community/prometheus -n confluent -f observability/prometheus-values.yaml`. Confirmed fixed: 7/7 scrape targets back to `up`, consumer-group lag data flowing again within a minute of the new pod starting |
+| Browser shows **"Failed to load dashboard / Failed to fetch"** | The Grafana pod was recreated (this node's ~99% CPU allocation causes it to be *preempted* by the scheduler to make room for other pods) and, without a PVC, came back with an empty database — the dashboard URL you had open no longer exists server-side. Confirmed via `oc get events \| grep -i grafana`: `Preempted by pod ...`. Fixed by switching `grafana-values.yaml` to `persistence.enabled: true` (200Mi PVC) — confirmed the dashboards now survive even an outright `oc delete pod`. If you still had an open session from before the pod was replaced, log out and back in (see next row) |
+| Grafana `401 "user token not found"` in logs / API calls | A browser session token for a Grafana backend that no longer exists (pod was replaced, fresh SQLite DB with no record of that session). Log out and log back in |
 
 ## In enterprise production
 

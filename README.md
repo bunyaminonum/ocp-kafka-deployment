@@ -310,6 +310,16 @@ oc get kafka,kraftcontroller -n $NS   # STATUS=RUNNING
 > `rackAssignment.nodeLabels: [topology.kubernetes.io/zone]` for real multi-AZ spread;
 > `resources` reflect real workload sizing (cpu 4/mem 16Gi+ per broker is typical).
 
+> **Self-Balancing Clusters — already on, no action needed:** CFK sets
+> `confluent.balancer.enable=true` on every broker by default (confirmed live via
+> `kafka-configs --describe --entity-type brokers --entity-name 0 --all`, which also shows
+> `DEFAULT_CONFIG:confluent.balancer.enable=false` in the synonyms — i.e. CFK's own default
+> overrides upstream Kafka's). This is a Confluent-enterprise feature (Cruise-Control-based
+> automatic partition rebalancing on broker add/remove/failure), and it works even unlicensed,
+> riding on Confluent Platform's automatic 30-day trial license (`confluent.license.topic =
+> _confluent-license`, confirmed in the broker logs). To disable it, set
+> `confluent.balancer.enable=false` under `spec.configOverrides` on the Kafka CR.
+
 ### Adding authorization (ACLs)
 
 > ACL authorization is independent of the SASL mechanism — it works the same whether
@@ -348,7 +358,18 @@ oc exec -n $NS kafka-0 -- kafka-acls --bootstrap-server kafka:9071 --command-con
 
 > **In enterprise production:** ACLs are usually managed centrally (Confluent RBAC via MDS,
 > or an internal self-service tool) rather than one-off `kafka-acls` calls per principal —
-> `authorization.type: rbac` is the CFK alternative to `simple` for that model.
+> `authorization.type: rbac` is the CFK alternative to `simple` for that model. Verified
+> against Confluent's docs (not guessed): RBAC requires (1) MDS configured on the Kafka CR (a
+> token key pair for signing MDS-issued tokens, plus a dedicated inter-broker listener), (2)
+> an identity provider — LDAP (only supported search mode is `GROUPS`), OAuth/OIDC, mTLS
+> certificates, or file-based auth (CLI/Control Center only) — and (3) a `KafkaRestClass` CR.
+> None of this is deployed here yet — this is a genuinely bigger change than anything else in
+> this repo, not a config flag flip. This environment already has a working cert-manager PKI,
+> so mTLS would be the most natural identity provider to add first if/when RBAC is adopted
+> (avoids standing up a separate LDAP server). A license does not appear to be a hard
+> technical prerequisite for RBAC itself, but Confluent's unlicensed operation auto-starts a
+> 30-day trial and stops working entirely after — a production RBAC rollout should have a
+> real license applied regardless.
 
 ---
 
@@ -384,9 +405,12 @@ completed`) continues afterward with no errors/restarts.
 
 > In an enterprise environment, deployment isn't manual `oc apply` — it's automated. Two
 > models are documented here; **pick one** (running both against the same manifests is
-> harmless but redundant — see the push-vs-pull comparison below).
+> harmless but redundant — see the push-vs-pull comparison below). **Option A (GitHub
+> Actions) is the primary/recommended path for this repo** — the full step-by-step runbook
+> (RBAC, prerequisite secrets, kubeconfig, triggering, verification) is 7.A below. Option B
+> (ArgoCD) is fully documented and tested too, kept as the pull-based alternative.
 
-### Option A — GitHub Actions (push-based)
+### Option A — GitHub Actions (push-based, recommended)
 
 **Push (GitHub Actions) vs Pull (ArgoCD):**
 - **Push**: a git push triggers a GitHub event → a runner picks it up → the runner connects

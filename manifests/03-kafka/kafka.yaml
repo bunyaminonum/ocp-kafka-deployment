@@ -29,6 +29,9 @@ spec:
         enabled: true
         secretRef: kafka-jmx-access
   dataVolumeCapacity: 20Gi
+  configOverrides:
+    server:
+      - "num.io.threads=16"
   image:
     application: confluentinc/cp-server:8.3.0
     init: confluentinc/confluent-init-container:3.3.0

@@ -32,8 +32,8 @@ spec:
         secretRef: kafka-jmx-access
   dataVolumeCapacity: 10Gi
   configOverrides:
-  server:
-  - "allow.everyone.if.no.acl.found=false"
+    server:
+    - "allow.everyone.if.no.acl.found=false"
   image:
     application: confluentinc/cp-server:8.3.0
     init: confluentinc/confluent-init-container:3.3.0

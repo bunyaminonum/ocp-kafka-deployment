@@ -31,7 +31,27 @@ spec:
   dataVolumeCapacity: 20Gi
   configOverrides:
     server:
+      - "allow.everyone.if.no.acl.found=false"
+      - "num.network.threads=12"
+      - "max.connections.per.ip=1500"
+      - "max.connections=40000"
       - "num.io.threads=16"
+      - "socket.send.buffer.bytes=102400"
+      - "socket.receive.buffer.bytes=102400"
+      - "socket.request.max.bytes=104857600"
+      - "connections.max.idle.ms=14400000"
+      - "message.max.bytes=33554816"
+      - "queued.max.requests=1000"
+      - "num.partitions=3"
+      - "num.recovery.threads.per.data.dir=4"
+      - "offsets.topic.replication.factor=3"
+      - "transaction.state.log.replication.factor=3"
+      - "transaction.state.log.min.isr=2"
+      - "log.retention.hours=12"
+      - "log.retention.bytes=10737418240"
+      - "log.retention.check.interval.ms=300000"
+      - "group.initial.rebalance.delay.ms=3000"
+
   image:
     application: confluentinc/cp-server:8.3.0
     init: confluentinc/confluent-init-container:3.3.0

@@ -9,7 +9,7 @@ metadata:
   namespace: confluent
 spec:
   # 3 brokers = classic HA minimum; replication-factor-3 topics stay up even if one broker goes down.
-  replicas: 3
+  replicas: 4
   # ACL authorization (native CFK support, no SASL/SCRAM needed — ACLs work with any SASL
   # mechanism, PLAIN included). With this enabled, every principal except superUsers is
   # denied by default unless an explicit ACL grants it (see README - Authorization/ACLs).

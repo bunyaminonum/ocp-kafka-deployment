@@ -320,6 +320,20 @@ oc get kafka,kraftcontroller -n $NS   # STATUS=RUNNING
 > _confluent-license`, confirmed in the broker logs). To disable it, set
 > `confluent.balancer.enable=false` under `spec.configOverrides` on the Kafka CR.
 
+> **`KafkaRestClass` — set this up now, not when you first need to scale:** CFK needs its own
+> Admin REST Class CR ([`manifests/03-kafka/kafka-rest-class.yaml`](manifests/03-kafka/kafka-rest-class.yaml))
+> to manage `KafkaTopic` CRs, Confluent RBAC role bindings, and — critically — **cluster
+> shrink**. Hit this the hard way: bumping `spec.replicas` 3→4 without a `KafkaRestClass`
+> already in place made CFK create a PVC placeholder with a bogus `storageClassName: dummy`,
+> which it then couldn't patch to the real StorageClass (PVC `storageClassName` is immutable
+> after creation) — `ApplyFailed` forever. CFK's own automatic rollback-on-failure (shrinking
+> back to 3) *also* requires a `KafkaRestClass`, which didn't exist yet either, so the
+> operator got stuck fighting itself in both directions until one was created. The embedded
+> Admin REST API this CR points at (`io.confluent.kafkarest.KafkaRestApplication`, part of
+> `cp-server` itself, port 8090) needs no `authentication` block here — confirmed live,
+> it enforces none by default. Create this CR as part of initial setup, before ever touching
+> `spec.replicas`.
+
 ### Adding authorization (ACLs)
 
 > ACL authorization is independent of the SASL mechanism — it works the same whether
@@ -642,7 +656,8 @@ manifests/
 │   └── root-ca.yaml               # Self-signed bootstrap Issuer + root CA
 ├── 03-kafka/
 │   ├── kraft-controller.yaml     # KRaftController: TLS + SASL/PLAIN + resources + affinity
-│   └── kafka.yaml                 # Kafka: TLS + SASL/PLAIN + resources + affinity
+│   ├── kafka.yaml                 # Kafka: TLS + SASL/PLAIN + resources + affinity
+│   └── kafka-rest-class.yaml      # Admin REST Class — required before ever scaling replicas
 └── 04-automation/
     ├── github-actions-rbac.yaml  # least-privilege identity for Option A
     ├── gitops-operator.yaml       # Red Hat OpenShift GitOps operator (OLM)
@@ -686,6 +701,7 @@ production capacity." Drawn honestly:
 | Observability (JMX -> Prometheus -> Grafana) | ✅ Real — 6/6 scrape targets `up`, a 49-panel hand-built dashboard with all 70 queries confirmed against live data. Trimmed to one component each (no HA/alerting/persistence) purely for this node's CPU budget |
 | Consumer-group lag (kminion) | ✅ Real — kminion connects over TLS+SASL as a dedicated read-only principal; a deliberately-lagged demo group reported lag=40 identically in kminion, Prometheus, and `kafka-consumer-groups --describe` |
 | Resource requests/limits | ✅ Real, but sized for this small practice environment, not real production load |
+| `KafkaRestClass` (Admin REST Class) | ✅ Real — deploying it live unblocked a genuinely-hit stuck scale-up/rollback deadlock (see `kafka-rest-class.yaml`'s comment); a real scale-to-4 test was blocked only by node CPU capacity, not config |
 | Pod anti-affinity | ⚠️ Config is correct but `preferred` (soft) — `required` would strand pods with nowhere to schedule on one node. The same YAML enforces hard isolation automatically on a real multi-node cluster |
 | Rack/multi-AZ awareness | ❌ Can't be tested on a single node, not included here |
 | SASL/SCRAM | ❌ CFK doesn't natively support it (verified fact, not a choice) — SASL/PLAIN is used instead |

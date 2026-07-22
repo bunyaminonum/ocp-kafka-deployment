@@ -1,0 +1,19 @@
+# KafkaRestClass — tells CFK's own operator how to reach the embedded Admin REST API
+# (io.confluent.kafkarest.KafkaRestApplication, already running on every broker at port 8090
+# by default — confirmed live via `curl http://kafka-0:8090/kafka/v3/clusters` returning 200
+# with zero credentials). The operator needs this to perform KafkaTopic CR management,
+# Confluent RBAC role bindings, and cluster shrink (safe broker removal) — none of these go
+# through the raw Kafka wire protocol.
+#
+# No 'authentication' block: our broker's embedded REST API currently enforces none (verified
+# live, unauthenticated request succeeded). If REST auth is added later, this CR needs an
+# 'authentication' block added to match (type: basic/bearer/mtls/oauth per the CRD schema).
+apiVersion: platform.confluent.io/v1beta1
+kind: KafkaRestClass
+metadata:
+  name: default
+  namespace: confluent
+spec:
+  kafkaClusterRef:
+    name: kafka
+    namespace: confluent

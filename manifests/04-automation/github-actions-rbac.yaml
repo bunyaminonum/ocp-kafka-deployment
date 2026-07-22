@@ -1,7 +1,13 @@
 # Least-privilege identity for the GitHub Actions self-hosted runner (push-based automation,
 # see README - Automation option A). Same least-privilege pattern as gitops-rbac.yaml (used
-# for ArgoCD) — same idea, just a different identity. Scoped ONLY to kafkas/kraftcontrollers
-# in the confluent namespace; read-only on pods/statefulsets for the workflow's verify step.
+# for ArgoCD) — same idea, just a different identity. Scoped ONLY to
+# kafkas/kraftcontrollers/kafkarestclasses in the confluent namespace; read-only on
+# pods/statefulsets for the workflow's verify step.
+#
+# kafkarestclasses added after a real failure: the workflow applies every file under
+# manifests/03-kafka/ (now including kafka-rest-class.yaml) with this identity — without
+# this resource type in the Role, `oc apply` hit a 403 and the whole step failed with exit
+# code 1 (confirmed via the runner's own local worker log and `oc auth can-i`).
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -15,7 +21,7 @@ metadata:
   namespace: confluent
 rules:
   - apiGroups: ["platform.confluent.io"]
-    resources: ["kafkas", "kraftcontrollers"]
+    resources: ["kafkas", "kraftcontrollers", "kafkarestclasses"]
     verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
   - apiGroups: [""]
     resources: ["pods", "pods/log", "events", "persistentvolumeclaims"]

@@ -79,10 +79,10 @@ spec:
   podTemplate:
     resources:
       requests:
-        cpu: "500m"
+        cpu: "300m"
         memory: "1536Mi"
       limits:
-        cpu: "1"
+        cpu: "0.5"
         memory: "3Gi"
     affinity:
       podAntiAffinity:
